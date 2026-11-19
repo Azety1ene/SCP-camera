@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { M_PLUS_1_Code, Noto_Sans_JP } from "next/font/google";
 import "./globals.css";
 import { AudioUnlocker } from "@/components/SoundToggle.tsx";
+import { AmbientEffects } from "@/components/AmbientEffects.tsx";
 
 // 端末の文字(等幅)
 const terminalFont = M_PLUS_1_Code({
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {children}
         <AudioUnlocker />
+        <AmbientEffects />
         {/* 画面全体にかかる走査線とちらつき */}
         <div aria-hidden className="crt-overlay" />
       </body>

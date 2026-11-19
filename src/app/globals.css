@@ -166,13 +166,24 @@ body {
   animation: flash 0.5s ease-out forwards;
 }
 
+/* 収容違反の警報で画面が赤く点滅する */
+@keyframes breach-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.breach-flash {
+  animation: breach-flash 0.9s steps(2) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crt-overlay,
   .cursor::after,
   .sweep,
   .glitch-in,
   .flash,
-  .redact-denied {
+  .redact-denied,
+  .breach-flash {
     animation: none;
   }
 

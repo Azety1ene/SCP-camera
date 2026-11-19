@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { cctvTimestamp, drawToCanvas, toCctvJpeg, toSourceJpeg } from "@/lib/client/cctv.ts";
 import { newRecordId, saveRecord } from "@/lib/client/db.ts";
-import { useRequireClearance } from "@/lib/client/session.ts";
+import { useStaff } from "@/lib/client/progress.ts";
 import { detectFaces, drawRedactions, loadFaceDetector, padBox, redactFacesOnCanvas } from "@/lib/client/faces.ts";
 import { play, startHum, stopHum } from "@/lib/client/sound.ts";
 
@@ -69,7 +69,8 @@ function Corners() {
 }
 
 export function ScanCamera() {
-  const clearance = useRequireClearance();
+  const staff = useStaff();
+  const clearance = staff?.clearance;
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -229,7 +230,7 @@ export function ScanCamera() {
   }
 
   return (
-    <TerminalShell clearance={clearance} bare>
+    <TerminalShell staff={staff} bare>
       <div className="relative flex-1 overflow-hidden bg-black">
         <video
           ref={videoRef}

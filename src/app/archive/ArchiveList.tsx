@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { deleteRecord, listRecords, type ContainmentRecord } from "@/lib/client/db.ts";
-import { useRequireClearance } from "@/lib/client/session.ts";
+import { useStaff } from "@/lib/client/progress.ts";
 import { useObjectUrl } from "@/lib/client/useObjectUrl.ts";
 
 const STATUS_LABEL: Record<ContainmentRecord["status"], string> = {
@@ -20,7 +20,8 @@ function Thumbnail({ blob, alt }: { blob: Blob; alt: string }) {
 }
 
 export function ArchiveList() {
-  const clearance = useRequireClearance();
+  const staff = useStaff();
+  const clearance = staff?.clearance;
   const [records, setRecords] = useState<ContainmentRecord[] | null>(null);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function ArchiveList() {
   if (!clearance) return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
 
   return (
-    <TerminalShell clearance={clearance}>
+    <TerminalShell staff={staff}>
       <h1 className="text-lg text-accent glow">収容記録</h1>
       <p className="mt-1 text-xs text-muted">この端末で作成された報告書の一覧。記録はこの端末の内部にのみ保存されています。</p>
 

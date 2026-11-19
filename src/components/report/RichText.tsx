@@ -1,12 +1,14 @@
 import { Fragment, type ReactNode } from "react";
-import type { Clearance } from "@/lib/client/session.ts";
+import { hasClearance, type Clearance } from "@/lib/client/session.ts";
+import { requiredForRedaction } from "@/lib/client/progress.ts";
 import { Declassified, Redacted } from "./Redaction.tsx";
 
 /**
  * 報告書本文の記法を表示に変える。
- * - [[...]] 物語の核心。レベル2では黒塗り、O5では開示表示
+ * - [[...]] 物語の核心。箇所ごとに必要なクリアランスが決まっていて(progress.ts)、足りなければ黒塗り
  * - [注n]   脚注への参照
  * - 改行(\n) 空行で段落を分け、1つの改行は行の折り返しにする
+ * - 「## 」で始まる段落は見出しにする(書庫の文書用)
  */
 
 const TOKEN = /\[\[([\s\S]+?)\]\]|\[注(\d+)\]/g;
@@ -20,7 +22,16 @@ function renderInline(text: string, clearance: Clearance, keyPrefix: string): Re
     if (start > last) nodes.push(text.slice(last, start));
     const key = `${keyPrefix}-${index++}`;
     if (match[1] !== undefined) {
-      nodes.push(clearance === "O5" ? <Declassified key={key} text={match[1]} /> : <Redacted key={key}>{match[1]}</Redacted>);
+      const required = requiredForRedaction(match[1]);
+      nodes.push(
+        hasClearance(clearance, required) ? (
+          <Declassified key={key} text={match[1]} />
+        ) : (
+          <Redacted key={key} required={required}>
+            {match[1]}
+          </Redacted>
+        ),
+      );
     } else {
       const n = match[2];
       nodes.push(
@@ -62,11 +73,17 @@ export function RichText({
 
   return (
     <>
-      {normalized.split(/\n{2,}/).map((paragraph, p) => (
-        <p key={p} className={className}>
-          {lines(paragraph, p)}
-        </p>
-      ))}
+      {normalized.split(/\n{2,}/).map((paragraph, p) =>
+        paragraph.startsWith("## ") ? (
+          <h3 key={p} className="mb-2 mt-6 font-bold">
+            {lines(paragraph.slice(3), p)}
+          </h3>
+        ) : (
+          <p key={p} className={className}>
+            {lines(paragraph, p)}
+          </p>
+        ),
+      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { GeneratedReport } from "@/lib/report/schema.ts";
+import type { StoredReport } from "@/lib/report/schema.ts";
 
 /**
  * 収容記録(報告書)はブラウザの IndexedDB に保存する。サーバーには残さない。
@@ -19,7 +19,7 @@ export type ContainmentRecord = {
   photoFiltered: Blob;
   itemNumber?: string;
   tone?: string;
-  report?: GeneratedReport;
+  report?: StoredReport;
   error?: { code: string; message: string };
   /** 生成を始めた時刻。リロードで二重に生成しないために使う */
   requestedAt?: number;

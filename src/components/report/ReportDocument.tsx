@@ -1,9 +1,10 @@
 import { forwardRef, type ReactNode } from "react";
-import type { GeneratedReport } from "@/lib/report/schema.ts";
+import type { StoredReport } from "@/lib/report/schema.ts";
+import { AcsBar, ClassifiedStamp } from "./AcsBar.tsx";
 import { CLEARANCE_LABEL, type Clearance } from "@/lib/client/session.ts";
 import { RichText } from "./RichText.tsx";
 
-type Addendum = GeneratedReport["addenda"][number];
+type Addendum = StoredReport["addenda"][number];
 
 /** 記録の形式ごとの見た目。会話やログは枠で囲み、手紙は便箋風にする */
 const BOXED_FORMATS = new Set(["実験ログ", "インタビュー記録", "事案記録", "探査ログ", "対象と結果の表", "公的書式"]);
@@ -36,7 +37,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 export type ReportDocumentProps = {
   itemNumber: string;
-  report: GeneratedReport;
+  report: StoredReport;
   photoUrl: string;
   clearance: Clearance;
   recordedAt: Date;
@@ -49,7 +50,7 @@ export const ReportDocument = forwardRef<HTMLElement, ReportDocumentProps>(funct
 ) {
   const isO5 = clearance === "O5";
   return (
-    <article ref={ref} className="bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">
+    <article ref={ref} className="relative bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">
       {/* 文書の帯 */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink pb-2 font-mono text-[11px] tracking-wider">
         <span>SCP財団 記録・情報保安管理局</span>
@@ -58,9 +59,13 @@ export const ReportDocument = forwardRef<HTMLElement, ReportDocumentProps>(funct
         </span>
       </div>
 
-      <h2 className="mt-6 text-xl font-bold leading-snug sm:text-2xl">
+      <ClassifiedStamp />
+
+      <h2 className="mt-6 pr-20 text-xl font-bold leading-snug sm:text-2xl">
         {itemNumber} - {report.title}
       </h2>
+
+      <AcsBar itemNumber={itemNumber} report={report} />
 
       {/* 添付資料(撮影写真) */}
       <figure className="my-5 border border-ink/30 bg-white p-2 sm:float-right sm:my-1 sm:ml-6 sm:w-[46%]">

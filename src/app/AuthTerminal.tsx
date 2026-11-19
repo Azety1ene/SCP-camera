@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CLEARANCE_LABEL, fetchClearance, type Clearance } from "@/lib/client/session.ts";
+import { CLEARANCE_LABEL, fetchClearance, type ServerClearance as Clearance } from "@/lib/client/session.ts";
 import { play, unlockAudio } from "@/lib/client/sound.ts";
 import { SoundToggle } from "@/components/SoundToggle.tsx";
 
@@ -260,7 +260,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
     await wait(700);
     push({ text: "観測端末を起動します ...", tone: "muted" });
     await wait(900);
-    router.push("/scan");
+    router.push("/portal");
   }
 
   if (!powered) {
@@ -311,11 +311,11 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
                 type="button"
                 onClick={() => {
                   play("tap");
-                  router.push("/scan");
+                  router.push("/portal");
                 }}
                 className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background"
               >
-                観測を開始する
+                端末に入る
               </button>
               <button
                 type="button"

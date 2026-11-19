@@ -18,7 +18,9 @@ export type SoundName =
   | "granted" // 認証成功
   | "shutter" // 撮影
   | "complete" // 照会完了
-  | "declassify"; // O5 での黒塗り解除
+  | "declassify" // 黒塗りの解除
+  | "mail" // 新着メール
+  | "alarm"; // 収容違反の警報
 
 const STORAGE_KEY = "scp-sound";
 const CHANGE_EVENT = "scp-sound-change";
@@ -151,6 +153,17 @@ const SOUNDS: Record<SoundName, (ctx: AudioContext, out: AudioNode) => void> = {
     tone(ctx, out, { type: "sine", freq: 660, dur: 0.1, gain: 0.07 });
     tone(ctx, out, { type: "sine", freq: 990, start: 0.12, dur: 0.1, gain: 0.07 });
     tone(ctx, out, { type: "sine", freq: 1320, start: 0.24, dur: 0.18, gain: 0.06 });
+  },
+  mail: (ctx, out) => {
+    tone(ctx, out, { type: "sine", freq: 1568, dur: 0.08, gain: 0.06 });
+    tone(ctx, out, { type: "sine", freq: 1175, start: 0.09, dur: 0.14, gain: 0.06 });
+  },
+  alarm: (ctx, out) => {
+    // 上下するサイレンを3回
+    for (let i = 0; i < 3; i++) {
+      tone(ctx, out, { type: "sawtooth", freq: 520, to: 880, start: i * 0.9, dur: 0.45, gain: 0.07 });
+      tone(ctx, out, { type: "sawtooth", freq: 880, to: 520, start: i * 0.9 + 0.45, dur: 0.45, gain: 0.07 });
+    }
   },
   declassify: (ctx, out) => {
     noise(ctx, out, { dur: 0.55, gain: 0.08, filter: "bandpass", freq: 4200, to: 500 });

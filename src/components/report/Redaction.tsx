@@ -2,9 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { play } from "@/lib/client/sound.ts";
+import { stableFraction } from "@/lib/client/progress.ts";
+import { CLEARANCE_LABEL, type Clearance } from "@/lib/client/session.ts";
 
-/** レベル2の黒塗り。タップすると震えて「閲覧権限がありません」と出る */
-export function Redacted({ children }: { children: ReactNode }) {
+/** クリアランスが足りない黒塗り。タップすると震えて「閲覧権限がありません」と出る */
+export function Redacted({ children, required }: { children: ReactNode; required: Clearance }) {
   const [denied, setDenied] = useState(0);
 
   useEffect(() => {
@@ -43,21 +45,14 @@ export function Redacted({ children }: { children: ReactNode }) {
           className="glitch-in pointer-events-none fixed inset-x-4 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 mx-auto block max-w-sm border border-[#e2675a] bg-[#1a0806] px-4 py-3 text-center font-mono text-[12px] leading-6 not-italic text-[#f0b9b0] shadow-lg"
         >
           <span className="block font-bold tracking-widest text-[#e2675a]">ACCESS DENIED</span>
-          閲覧権限がありません ── 要求クリアランス: O5
+          閲覧権限がありません ── 要求クリアランス: {CLEARANCE_LABEL[required]}
         </span>
       )}
     </span>
   );
 }
 
-/** 文字列から決まる値(0〜1)。黒塗りが剥がれる順番を、毎回同じにするために使う */
-function stableFraction(text: string): number {
-  let hash = 0;
-  for (const ch of text) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return (hash % 1000) / 1000;
-}
-
-/** O5で開示された核心。開いた直後は黒塗りで、少しずつ剥がれて中身が現れる */
+/** クリアランスが足りて開示された核心。開いた直後は黒塗りで、少しずつ剥がれて中身が現れる */
 export function Declassified({ text }: { text: string }) {
   const [revealed, setRevealed] = useState(false);
   const delay = 0.6 + stableFraction(text) * 1.6;

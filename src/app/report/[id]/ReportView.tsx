@@ -6,9 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { ReportDocument } from "@/components/report/ReportDocument.tsx";
 import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@/lib/client/db.ts";
-import { useRequireClearance } from "@/lib/client/session.ts";
+import { useStaff } from "@/lib/client/progress.ts";
 import { useObjectUrl } from "@/lib/client/useObjectUrl.ts";
 import { play } from "@/lib/client/sound.ts";
+import { setRating, useRatings } from "@/lib/client/store.ts";
 import type { GeneratedReport } from "@/lib/report/schema.ts";
 
 /** 照会中に順に流す処理ログ(実際の処理とは対応していない演出) */
@@ -68,6 +69,39 @@ function QueryLog({ startedAt, photoUrl }: { startedAt: number; photoUrl: string
   );
 }
 
+/** Wiki の評価モジュールに倣った「好き / 好きじゃない」 */
+function RatingBox({ recordId }: { recordId: string }) {
+  const value = useRatings()[recordId] ?? 0;
+  const toggle = (next: 1 | -1) => {
+    play("tap");
+    setRating(recordId, value === next ? 0 : next);
+  };
+  const base = "h-7 w-7 border font-mono text-sm leading-none";
+  return (
+    <div className="mt-4 flex items-center gap-2 font-mono text-xs text-muted">
+      <span>評価: {value > 0 ? `+${value}` : value}</span>
+      <button
+        type="button"
+        title="好き"
+        aria-pressed={value === 1}
+        onClick={() => toggle(1)}
+        className={`${base} ${value === 1 ? "border-accent bg-accent text-background" : "border-line hover:text-foreground"}`}
+      >
+        +
+      </button>
+      <button
+        type="button"
+        title="好きじゃない"
+        aria-pressed={value === -1}
+        onClick={() => toggle(-1)}
+        className={`${base} ${value === -1 ? "border-danger bg-danger text-background" : "border-line hover:text-foreground"}`}
+      >
+        –
+      </button>
+    </div>
+  );
+}
+
 async function exportImage(node: HTMLElement, fileName: string) {
   const { toBlob } = await import("html-to-image");
   const blob = await toBlob(node, { pixelRatio: 2, backgroundColor: "#e9e6dc" });
@@ -89,7 +123,8 @@ async function exportImage(node: HTMLElement, fileName: string) {
 
 export function ReportView() {
   const { id } = useParams<{ id: string }>();
-  const clearance = useRequireClearance();
+  const staff = useStaff();
+  const clearance = staff?.clearance;
   const router = useRouter();
   const [record, setRecord] = useState<ContainmentRecord | null | undefined>(undefined);
   const photoUrl = useObjectUrl(record?.photoFiltered);
@@ -178,7 +213,7 @@ export function ReportView() {
   }
 
   return (
-    <TerminalShell clearance={clearance}>
+    <TerminalShell staff={staff}>
       {record === null && (
         <div className="space-y-4 text-sm leading-7">
           <p className="text-danger">該当する記録は存在しません。</p>
@@ -222,6 +257,7 @@ export function ReportView() {
             clearance={clearance}
             recordedAt={new Date(record.createdAt)}
           />
+          <RatingBox recordId={record.id} />
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
             <button
               type="button"
