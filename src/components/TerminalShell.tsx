@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { CLEARANCE_LABEL, logout, type Clearance } from "@/lib/client/session.ts";
 import { cctvTimestamp } from "@/lib/client/cctv.ts";
+import { SoundToggle } from "@/components/SoundToggle.tsx";
 
 const NAV = [
   { href: "/scan", label: "観測" },
@@ -91,6 +92,7 @@ export function TerminalShell({
                 {item.label}
               </Link>
             ))}
+            <SoundToggle />
             <button type="button" onClick={onLogout} className="hover:text-danger">
               退出
             </button>

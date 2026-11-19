@@ -6,6 +6,8 @@ import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { cctvTimestamp, drawToCanvas, toCctvJpeg, toSourceJpeg } from "@/lib/client/cctv.ts";
 import { newRecordId, saveRecord } from "@/lib/client/db.ts";
 import { useRequireClearance } from "@/lib/client/session.ts";
+import { detectFaces, drawRedactions, loadFaceDetector, padBox, redactFacesOnCanvas } from "@/lib/client/faces.ts";
+import { play, startHum, stopHum } from "@/lib/client/sound.ts";
 
 type CameraState = "starting" | "live" | "denied" | "unavailable";
 
@@ -77,6 +79,9 @@ export function ScanCamera() {
   const [now, setNow] = useState("");
   const [hume, setHume] = useState("1.00");
   const [messageIndex, setMessageIndex] = useState(0);
+  const [faceStatus, setFaceStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [facesInView, setFacesInView] = useState(0);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const camId = CAM_ID;
 
   // カメラの起動
@@ -110,6 +115,65 @@ export function ScanCamera() {
     };
   }, [clearance]);
 
+  // 顔検出の準備
+  useEffect(() => {
+    if (!clearance) return;
+    let cancelled = false;
+    loadFaceDetector().then((detector) => {
+      if (!cancelled) setFaceStatus(detector ? "ready" : "unavailable");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clearance]);
+
+  // 映像に映った顔を、プレビュー上でも黒塗りにする(約8回/秒)
+  useEffect(() => {
+    if (state !== "live" || faceStatus !== "ready") return;
+    let timer = 0;
+    let lastCount = -1;
+    let stopped = false;
+    const tick = async () => {
+      const detector = await loadFaceDetector();
+      const video = videoRef.current;
+      const overlay = overlayRef.current;
+      if (stopped || !detector || !video || !overlay || video.paused) return;
+      const width = overlay.clientWidth;
+      const height = overlay.clientHeight;
+      const ratio = window.devicePixelRatio || 1;
+      if (overlay.width !== Math.round(width * ratio)) overlay.width = Math.round(width * ratio);
+      if (overlay.height !== Math.round(height * ratio)) overlay.height = Math.round(height * ratio);
+      const ctx = overlay.getContext("2d")!;
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      // video は object-cover で表示しているので、同じ拡大・切り取りで座標を合わせる
+      const scale = Math.max(width / video.videoWidth, height / video.videoHeight);
+      const offsetX = (width - video.videoWidth * scale) / 2;
+      const offsetY = (height - video.videoHeight * scale) / 2;
+      const boxes = detectFaces(detector, video).map((box) => {
+        const padded = padBox(box, video.videoWidth, video.videoHeight);
+        return { x: padded.x * scale + offsetX, y: padded.y * scale + offsetY, width: padded.width * scale, height: padded.height * scale };
+      });
+      drawRedactions(ctx, boxes);
+      if (boxes.length !== lastCount) {
+        lastCount = boxes.length;
+        setFacesInView(boxes.length);
+      }
+    };
+    timer = window.setInterval(tick, 120);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [state, faceStatus]);
+
+  // 観測中の環境音
+  useEffect(() => {
+    if (state !== "live") return;
+    startHum();
+    return () => stopHum();
+  }, [state]);
+
   // 時刻・計測値・状態表示の更新
   useEffect(() => {
     const timer = setInterval(() => {
@@ -125,6 +189,8 @@ export function ScanCamera() {
 
   async function record(canvas: HTMLCanvasElement) {
     const at = new Date();
+    // 人が写っていたら、生成に送る画像と添付資料の両方で顔を黒塗りにする
+    await redactFacesOnCanvas(canvas);
     const [photo, photoFiltered] = await Promise.all([toSourceJpeg(canvas), toCctvJpeg(canvas, { camId, at })]);
     const id = newRecordId();
     await saveRecord({ id, createdAt: at.getTime(), status: "pending", photo, photoFiltered });
@@ -136,6 +202,7 @@ export function ScanCamera() {
     if (!video || state !== "live" || capturing) return;
     setCapturing(true);
     setFlash(true);
+    play("shutter");
     video.pause();
     try {
       await record(drawToCanvas(video));
@@ -170,6 +237,8 @@ export function ScanCamera() {
           muted
           className="absolute inset-0 h-full w-full object-cover [filter:grayscale(1)_contrast(1.3)_brightness(0.9)_sepia(0.35)_hue-rotate(55deg)_saturate(0.8)]"
         />
+        {/* 顔の黒塗り(プレビュー用) */}
+        <canvas ref={overlayRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
         <NoiseLayer />
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[10%] bg-gradient-to-b from-transparent via-accent/10 to-transparent sweep" />
         <Corners />
@@ -190,6 +259,15 @@ export function ScanCamera() {
             {SCAN_MESSAGES[messageIndex]} …
           </span>
           <span className="tabular-nums">ヒューム値 {hume} Hm</span>
+        </div>
+        <div className="pointer-events-none absolute inset-x-8 bottom-[7.5rem] text-[11px]">
+          {facesInView > 0 ? (
+            <span className="text-warn">人物を検出 ── 自動編集を適用中({facesInView})</span>
+          ) : (
+            <span className="text-muted">
+              顔認識 {faceStatus === "ready" ? "有効" : faceStatus === "loading" ? "準備中 …" : "無効"}
+            </span>
+          )}
         </div>
 
         {/* カメラが使えないとき */}

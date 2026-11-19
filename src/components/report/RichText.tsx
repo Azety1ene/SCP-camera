@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import type { Clearance } from "@/lib/client/session.ts";
+import { Declassified, Redacted } from "./Redaction.tsx";
 
 /**
  * 報告書本文の記法を表示に変える。
@@ -19,17 +20,7 @@ function renderInline(text: string, clearance: Clearance, keyPrefix: string): Re
     if (start > last) nodes.push(text.slice(last, start));
     const key = `${keyPrefix}-${index++}`;
     if (match[1] !== undefined) {
-      nodes.push(
-        clearance === "O5" ? (
-          <mark key={key} className="declassified text-inherit">
-            {match[1]}
-          </mark>
-        ) : (
-          <span key={key} className="redacted" aria-label="[編集済み]" title="閲覧にはより高いクリアランスが必要です">
-            {match[1]}
-          </span>
-        ),
-      );
+      nodes.push(clearance === "O5" ? <Declassified key={key} text={match[1]} /> : <Redacted key={key}>{match[1]}</Redacted>);
     } else {
       const n = match[2];
       nodes.push(

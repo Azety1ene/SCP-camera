@@ -22,6 +22,7 @@ export default function AboutPage() {
         <ul className="list-inside list-disc space-y-1 text-muted">
           <li>撮影した画像は、報告書の生成のためにGoogleのGemini APIへ送信されます。</li>
           <li>送信する画像は端末内で縮小し、位置情報などのメタデータは含めません。</li>
+          <li>写っている人の顔は、送信や保存の前に端末内で自動的に黒塗りにします。顔の検出はブラウザ内で行い、そのための画像はどこにも送りません(検出の仕組みは MediaPipe を使い、実行用のファイルを jsDelivr から読み込みます)。</li>
           <li>報告書と画像は、お使いのブラウザ内(IndexedDB)にのみ保存され、本サイトのサーバーには保存されません。</li>
         </ul>
       </section>

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CLEARANCE_LABEL, fetchClearance, type Clearance } from "@/lib/client/session.ts";
+import { play, unlockAudio } from "@/lib/client/sound.ts";
+import { SoundToggle } from "@/components/SoundToggle.tsx";
 
 type Tone = "muted" | "accent" | "warn" | "danger";
 
@@ -115,6 +117,8 @@ const TONE_CLASS: Record<NonNullable<Line["tone"]>, string> = {
 
 export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: string } }) {
   const router = useRouter();
+  /** 「端末を起動する」を押したか。音を鳴らすには、最初に画面に触れてもらう必要がある */
+  const [powered, setPowered] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
   const [booted, setBooted] = useState(false);
   const [existing, setExisting] = useState<Clearance | null>(null);
@@ -132,6 +136,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
 
   // 起動シーケンス: 状態の行は「…」を伸ばしてから少し間を置いて結果を出し、警告文は1文字ずつ打つ
   useEffect(() => {
+    if (!powered) return;
     let cancelled = false;
     const pause = (ms: number) => (skipRef.current || cancelled ? Promise.resolve() : wait(ms));
 
@@ -156,12 +161,14 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
           // 処理しているように、結果が出るまで少し待つ
           await pause(randomBetween(350, 900));
           updateLast((line) => ({ text: `${line.text} `, status: step.status, statusTone: step.statusTone }));
+          if (!skipRef.current) play("ok");
           await pause(120);
         } else {
           push({ text: "", tone: step.tone, typing: true });
           for (const ch of step.text) {
             if (skipRef.current) break;
             updateLast((line) => ({ text: line.text + ch }));
+            if (ch.trim()) play("key");
             await pause("。、".includes(ch) ? 220 : randomBetween(28, 60));
           }
           updateLast(() => ({ typing: false }));
@@ -185,7 +192,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
       window.removeEventListener("pointerdown", skip);
       window.removeEventListener("keydown", skip);
     };
-  }, []);
+  }, [powered]);
 
   useEffect(() => {
     if (booted && !existing) inputRef.current?.focus();
@@ -228,6 +235,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
       const failures = readFailures() + 1;
       writeFailures(failures);
       push(...failureLines(failures));
+      play("deny");
       if (failures >= 5) {
         setLockedFor(LOCK_SECONDS);
         writeFailures(3);
@@ -238,6 +246,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
 
     writeFailures(0);
     push({ text: "認証完了。", tone: "accent" });
+    play("granted");
     if (clearance === "O5") {
       await wait(500);
       push(
@@ -254,8 +263,33 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
     router.push("/scan");
   }
 
+  if (!powered) {
+    return (
+      <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-8 px-4 py-16 text-center text-sm leading-7">
+        <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
+        <div className="space-y-1">
+          <p className="text-xs tracking-[0.3em] text-muted">SECURE ・ CONTAIN ・ PROTECT</p>
+          <p className="text-accent glow">SCP財団 統合観測端末</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            unlockAudio();
+            play("power");
+            setPowered(true);
+          }}
+          className="border border-accent px-8 py-4 tracking-widest text-accent glow hover:bg-accent hover:text-background"
+        >
+          <span className="cursor">[ 端末を起動する ]</span>
+        </button>
+        <p className="text-xs text-muted">この端末は音が出ます。右上で切り替えられます。</p>
+      </main>
+    );
+  }
+
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 text-sm leading-7">
+    <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 text-sm leading-7">
+      <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
       <div className="flex-1 space-y-0.5">
         {lines.map((line, index) => (
           <p
@@ -275,7 +309,10 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => router.push("/scan")}
+                onClick={() => {
+                  play("tap");
+                  router.push("/scan");
+                }}
                 className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background"
               >
                 観測を開始する

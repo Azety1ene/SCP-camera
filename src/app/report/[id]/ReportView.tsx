@@ -8,6 +8,7 @@ import { ReportDocument } from "@/components/report/ReportDocument.tsx";
 import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@/lib/client/db.ts";
 import { useRequireClearance } from "@/lib/client/session.ts";
 import { useObjectUrl } from "@/lib/client/useObjectUrl.ts";
+import { play } from "@/lib/client/sound.ts";
 import type { GeneratedReport } from "@/lib/report/schema.ts";
 
 /** 照会中に順に流す処理ログ(実際の処理とは対応していない演出) */
@@ -118,6 +119,7 @@ export function ReportView() {
     }
     const next = await updateRecord(current.id, patch);
     if (next) setRecord(next);
+    play(patch.status === "done" ? "complete" : "deny");
   }, []);
 
   // 記録を読み込み、未生成なら生成を始める
@@ -144,6 +146,14 @@ export function ReportView() {
       cancelled = true;
     };
   }, [clearance, id, generate]);
+
+  // O5 で報告書を開いたら、黒塗りが剥がれ始めるのに合わせて音を鳴らす
+  const isDone = record?.status === "done";
+  useEffect(() => {
+    if (!isDone || clearance !== "O5") return;
+    const timer = setTimeout(() => play("declassify"), 600);
+    return () => clearTimeout(timer);
+  }, [isDone, clearance, id]);
 
   async function onExport() {
     if (!documentRef.current || !record?.itemNumber) return;
