@@ -5,17 +5,69 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CLEARANCE_LABEL, fetchClearance, type Clearance } from "@/lib/client/session.ts";
 
-type Line = { text: string; tone?: "muted" | "accent" | "warn" | "danger" };
+type Tone = "muted" | "accent" | "warn" | "danger";
 
-const BOOT: Line[] = [
-  { text: "SCP FOUNDATION / 日本支部 統合観測ネットワーク", tone: "accent" },
-  { text: "端末起動 ............................ 完了", tone: "muted" },
-  { text: "暗号化回線の確立 .................... 完了", tone: "muted" },
-  { text: "ミーム汚染フィルタ .................. 有効", tone: "muted" },
-  { text: "観測モジュール CCTV-81 .............. 待機", tone: "muted" },
-  { text: "" },
-  { text: "本端末は財団職員専用です。権限のない閲覧・操作はすべて記録され、処分の対象となります。", tone: "warn" },
+type Line = {
+  text: string;
+  tone?: Tone;
+  /** 行末に後から表示する状態(「完了」など) */
+  status?: string;
+  statusTone?: Tone;
+  /** 1文字ずつ表示している途中 */
+  typing?: boolean;
+};
+
+/** 起動シーケンスの手順 */
+type BootStep =
+  | { kind: "plain"; text: string; tone?: Tone }
+  | { kind: "status"; label: string; status: string; statusTone?: Tone }
+  | { kind: "blank" }
+  | { kind: "typed"; text: string; tone?: Tone };
+
+const BOOT: BootStep[] = [
+  { kind: "plain", text: "SCP FOUNDATION / 日本支部 統合観測ネットワーク", tone: "accent" },
+  { kind: "status", label: "端末起動", status: "完了" },
+  { kind: "status", label: "暗号化回線の確立", status: "完了" },
+  { kind: "status", label: "ミーム汚染フィルタ", status: "有効", statusTone: "accent" },
+  { kind: "status", label: "観測モジュール CCTV-81", status: "待機", statusTone: "warn" },
+  { kind: "blank" },
+  {
+    kind: "typed",
+    text: "本端末は財団職員専用です。権限のない閲覧・操作はすべて記録され、処分の対象となります。",
+    tone: "warn",
+  },
 ];
+
+/** 状態の文字がそろう桁(全角は2桁として数える) */
+const STATUS_COLUMN = 36;
+
+function displayWidth(text: string): number {
+  let width = 0;
+  for (const ch of text) width += ch.charCodeAt(0) > 0xff ? 2 : 1;
+  return width;
+}
+
+function dotsFor(label: string): number {
+  return Math.max(3, STATUS_COLUMN - displayWidth(label) - 2);
+}
+
+/** 起動シーケンスを飛ばしたときに表示する、完成した状態 */
+function finishedBootLines(): Line[] {
+  return BOOT.map((step): Line => {
+    switch (step.kind) {
+      case "plain":
+        return { text: step.text, tone: step.tone };
+      case "status":
+        return { text: `${step.label} ${".".repeat(dotsFor(step.label))} `, tone: "muted", status: step.status, statusTone: step.statusTone };
+      case "blank":
+        return { text: "" };
+      case "typed":
+        return { text: step.text, tone: step.tone };
+    }
+  });
+}
+
+const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
 
 /** 失敗回数ごとの応答。回数が増えるほど物騒になる */
 function failureLines(count: number): Line[] {
@@ -71,26 +123,67 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
   const [lockedFor, setLockedFor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  /** 画面をタップするかキーを押すと、起動シーケンスを飛ばす */
+  const skipRef = useRef(false);
 
   const push = (...next: Line[]) => setLines((prev) => [...prev, ...next]);
+  const updateLast = (patch: (line: Line) => Partial<Line>) =>
+    setLines((prev) => (prev.length ? [...prev.slice(0, -1), { ...prev[prev.length - 1], ...patch(prev[prev.length - 1]) }] : prev));
 
-  // 起動シーケンス
+  // 起動シーケンス: 状態の行は「…」を伸ばしてから少し間を置いて結果を出し、警告文は1文字ずつ打つ
   useEffect(() => {
     let cancelled = false;
+    const pause = (ms: number) => (skipRef.current || cancelled ? Promise.resolve() : wait(ms));
+
     (async () => {
       const clearancePromise = fetchClearance();
-      for (const line of BOOT) {
-        await wait(line.text ? 140 : 60);
-        if (cancelled) return;
-        setLines((prev) => [...prev, line]);
+      await pause(300);
+      for (const step of BOOT) {
+        if (cancelled || skipRef.current) break;
+        if (step.kind === "plain") {
+          push({ text: step.text, tone: step.tone });
+          await pause(450);
+        } else if (step.kind === "blank") {
+          push({ text: "" });
+          await pause(250);
+        } else if (step.kind === "status") {
+          push({ text: `${step.label} `, tone: "muted" });
+          for (let i = 0; i < dotsFor(step.label); i++) {
+            if (skipRef.current) break;
+            await pause(14);
+            updateLast((line) => ({ text: `${line.text}.` }));
+          }
+          // 処理しているように、結果が出るまで少し待つ
+          await pause(randomBetween(350, 900));
+          updateLast((line) => ({ text: `${line.text} `, status: step.status, statusTone: step.statusTone }));
+          await pause(120);
+        } else {
+          push({ text: "", tone: step.tone, typing: true });
+          for (const ch of step.text) {
+            if (skipRef.current) break;
+            updateLast((line) => ({ text: line.text + ch }));
+            await pause("。、".includes(ch) ? 220 : randomBetween(28, 60));
+          }
+          updateLast(() => ({ typing: false }));
+        }
       }
+      if (cancelled) return;
+      if (skipRef.current) setLines(finishedBootLines());
       const clearance = await clearancePromise;
       if (cancelled) return;
       setExisting(clearance);
       setBooted(true);
     })();
+
+    const skip = () => {
+      skipRef.current = true;
+    };
+    window.addEventListener("pointerdown", skip, { once: true });
+    window.addEventListener("keydown", skip, { once: true });
     return () => {
       cancelled = true;
+      window.removeEventListener("pointerdown", skip);
+      window.removeEventListener("keydown", skip);
     };
   }, []);
 
@@ -165,8 +258,12 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 text-sm leading-7">
       <div className="flex-1 space-y-0.5">
         {lines.map((line, index) => (
-          <p key={index} className={`glitch-in whitespace-pre-wrap ${line.tone ? TONE_CLASS[line.tone] : ""}`}>
+          <p
+            key={index}
+            className={`glitch-in whitespace-pre-wrap ${line.tone ? TONE_CLASS[line.tone] : ""} ${line.typing ? "cursor" : ""}`}
+          >
             {line.text || " "}
+            {line.status && <span className={`glitch-in ${line.statusTone ? TONE_CLASS[line.statusTone] : "text-foreground"}`}>{line.status}</span>}
           </p>
         ))}
 
@@ -213,10 +310,15 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
                 onChange={(event) => setCode(event.target.value)}
                 className="w-full bg-transparent py-2 text-foreground outline-none placeholder:text-muted/50 disabled:opacity-50"
                 placeholder={lockedFor > 0 ? `端末ロック中 ... ${lockedFor}` : ""}
+                enterKeyHint="go"
               />
             </div>
-            <button type="submit" className="sr-only">
-              認証
+            <button
+              type="submit"
+              disabled={busy || lockedFor > 0 || !code.trim()}
+              className="mt-5 w-full border border-accent px-4 py-3 text-accent hover:bg-accent hover:text-background disabled:border-line disabled:text-muted"
+            >
+              {busy ? "照合中 …" : lockedFor > 0 ? `端末ロック中(${lockedFor})` : "認証する"}
             </button>
           </form>
         )}
