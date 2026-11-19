@@ -72,7 +72,9 @@ async function exportImage(node: HTMLElement, fileName: string) {
   const blob = await toBlob(node, { pixelRatio: 2, backgroundColor: "#e9e6dc" });
   if (!blob) throw new Error("画像を作成できませんでした");
   const file = new File([blob], fileName, { type: "image/png" });
-  if (navigator.canShare?.({ files: [file] })) {
+  // スマホでは共有シート(写真に保存などができる)を出す。PCではそのままダウンロードする
+  const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
+  if (isTouchDevice && navigator.canShare?.({ files: [file] })) {
     await navigator.share({ files: [file], title: fileName });
     return;
   }

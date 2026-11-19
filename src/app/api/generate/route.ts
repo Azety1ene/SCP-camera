@@ -2,6 +2,7 @@ import { ApiError } from "@google/genai";
 import { cookies } from "next/headers";
 import { GeminiUnavailableError } from "@/lib/gemini.ts";
 import { generateReport, ReportFormatError } from "@/lib/report/generate.ts";
+import { pickSampleReport, isSampleMode } from "@/lib/report/samples.ts";
 import { decodeSession, SESSION_COOKIE } from "@/lib/session.ts";
 
 // 生成には数分かかることがあるため、上限を長めにとる(秒)
@@ -34,6 +35,13 @@ export async function POST(request: Request) {
   if (!image) return errorResponse(400, "bad_request", "画像が添付されていません。");
   if (!ALLOWED_TYPES.has(image.type)) return errorResponse(415, "unsupported_type", "対応していない画像形式です。");
   if (image.size > MAX_IMAGE_BYTES) return errorResponse(413, "too_large", "画像が大きすぎます。");
+
+  // 見本モード: Gemini を呼ばず、用意した報告書を返す。照会中の演出が見えるよう少し待つ
+  if (isSampleMode()) {
+    await new Promise((resolve) => setTimeout(resolve, 6000 + Math.random() * 4000));
+    const sample = pickSampleReport();
+    return Response.json({ itemNumber: sample.itemNumber, tone: sample.tone, report: sample.report });
+  }
 
   const data = Buffer.from(await image.arrayBuffer()).toString("base64");
 

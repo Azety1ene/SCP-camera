@@ -16,7 +16,18 @@ cp .env.example .env.local   # 値を設定する
 pnpm dev
 ```
 
-スマホの実機でカメラを試すときはHTTPSが必要なので、`pnpm dev --experimental-https` を使う。
+### スマホの実機で確認する
+
+スマホのカメラはHTTPSでないと使えないので、専用のコマンドで起動する。
+
+```bash
+pnpm dev:phone
+```
+
+- PCのLAN内IPアドレス用の自己署名証明書を `.certificates/` に作り、HTTPSで開発サーバーを立てる
+- 表示された `https://<IP>:3000` を、同じWi-Fiにつないだスマホで開く
+- 自己署名証明書なので警告が出る。iPhone(Safari)は「詳細を表示」→「このWebサイトを閲覧」、Android(Chrome)は「詳細設定」→「アクセスする」で進む
+- 開発サーバーなので、生成には開発用のモデルが使われる
 
 ## 技術構成
 
