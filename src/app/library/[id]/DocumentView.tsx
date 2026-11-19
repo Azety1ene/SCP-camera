@@ -91,7 +91,7 @@ export function DocumentView() {
         <p className="text-sm text-danger">該当する文書は存在しません。</p>
       ) : !hasClearance(staff.clearance, doc.required) ? (
         <Denied doc={doc} clearance={CLEARANCE_LABEL[staff.clearance]} />
-      ) : doc.passcode && !unlocked.includes(doc.id) ? (
+      ) : doc.passcode && staff.clearance !== "O5" && !unlocked.includes(doc.id) ? (
         <PasscodeGate doc={doc} />
       ) : (
         <article className="glitch-in relative bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">

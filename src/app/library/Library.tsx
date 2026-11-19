@@ -21,7 +21,7 @@ export function Library() {
       <ul className="mt-6 space-y-3">
         {DOCUMENTS.map((doc) => {
           const allowed = hasClearance(staff.clearance, doc.required);
-          const locked = !!doc.passcode && !unlocked.includes(doc.id);
+          const locked = !!doc.passcode && staff.clearance !== "O5" && !unlocked.includes(doc.id);
           return (
             <li key={doc.id} className="glitch-in">
               <Link

@@ -25,10 +25,10 @@ export const MAILS: Mail[] = [
     from: "観測記録部門 人事係",
     address: "jinji.kansoku@site81.scp.int",
     subject: "着任のご案内",
-    when: () => true,
+    when: (ctx) => ctx.server !== "O5",
     body: `新任職員各位
 
-このたびは観測記録部門への着任、おめでとうございます。あなたは本日付で統合観測ネットワークの観測所に配属され、Cクラス職員として観測業務に従事します。
+このたびは観測記録部門への着任、おめでとうございます。あなたは本日付で統合観測ネットワークの観測所に配属され、観測業務に従事します。
 
 業務の内容は、身の回りにある「ありふれた物」を観測端末で記録することです。異常性の有無を判断する必要はありません。判断は財団データベースが行います。
 
@@ -46,7 +46,7 @@ export const MAILS: Mail[] = [
     from: "観測記録部門 記録課",
     address: "kiroku.kansoku@site81.scp.int",
     subject: "初回観測記録の受理について",
-    when: (ctx) => ctx.contained >= 1,
+    when: (ctx) => ctx.server !== "O5" && ctx.contained >= 1,
     body: `あなたの初回観測記録を受理しました。
 
 提出された記録は、財団データベースへの照会を経て報告書として登録されています。報告書の一部が黒塗りで表示される場合がありますが、知る必要性の原則に基づく措置です。
@@ -77,10 +77,10 @@ export const MAILS: Mail[] = [
     address: "jinji@jp.scp.int",
     subject: "辞令(クリアランスレベル3)",
     important: true,
-    when: (ctx) => ctx.contained >= 3 || ctx.server === "O5",
+    when: (ctx) => ctx.server !== "O5" && ctx.contained >= 3,
     body: `辞令
 
-観測記録部門 Cクラス職員 殿
+観測記録部門 所属職員 殿
 
 本日付で、あなたのセキュリティクリアランスをレベル3に改める。
 
@@ -100,10 +100,10 @@ export const MAILS: Mail[] = [
     address: "jinji@jp.scp.int",
     subject: "辞令(クリアランスレベル4)",
     important: true,
-    when: (ctx) => ctx.contained >= 6 || ctx.server === "O5",
+    when: (ctx) => ctx.server !== "O5" && ctx.contained >= 6,
     body: `辞令
 
-観測記録部門 Cクラス職員 殿
+観測記録部門 所属職員 殿
 
 本日付で、あなたのセキュリティクリアランスをレベル4に改める。
 
@@ -122,7 +122,7 @@ export const MAILS: Mail[] = [
     from: "観測記録部門 部門長室",
     address: "bumoncho.kansoku@site81.scp.int",
     subject: "【要確認】設置経緯書のパスコードについて",
-    when: (ctx) => ctx.contained >= 6 || ctx.server === "O5",
+    when: (ctx) => ctx.server !== "O5" && ctx.contained >= 6,
     body: `設置経緯書のパスコードは、規則によりメールでは通知できません。
 
 パスコードは、『事故事例集』の事例3に記載されています。当該の職員が端末に入力していた語句を、ひらがなのまま入力してください。

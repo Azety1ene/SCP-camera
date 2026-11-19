@@ -175,17 +175,11 @@ export function IdCard() {
             </div>
             <div>
               <dt className="font-mono text-[9px] text-ink/50">所属</dt>
-              <dd>観測記録部門</dd>
+              <dd>{staff.clearance === "O5" ? "O5評議会" : "観測記録部門"}</dd>
             </div>
-            <div className="flex gap-4">
-              <div>
-                <dt className="font-mono text-[9px] text-ink/50">職員分類</dt>
-                <dd>Cクラス</dd>
-              </div>
-              <div>
-                <dt className="font-mono text-[9px] text-ink/50">クリアランス</dt>
-                <dd className={staff.clearance === "O5" ? "font-bold text-[#a3241a]" : "font-bold"}>{CLEARANCE_LABEL[staff.clearance]}</dd>
-              </div>
+            <div>
+              <dt className="font-mono text-[9px] text-ink/50">クリアランス</dt>
+              <dd className={staff.clearance === "O5" ? "font-bold text-[#a3241a]" : "font-bold"}>{CLEARANCE_LABEL[staff.clearance]}</dd>
             </div>
           </dl>
         </div>

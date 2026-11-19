@@ -130,8 +130,7 @@ function PortalBody({ staff }: { staff: StaffState }) {
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Panel title="配属">
           <Row label="観測所" value={observatory} />
-          <Row label="所属" value="サイト-81██ 観測記録部門" />
-          <Row label="職員分類" value="Cクラス" />
+          <Row label="所属" value={staff.clearance === "O5" ? "O5評議会" : "サイト-81██ 観測記録部門"} />
           <Row
             label="クリアランス"
             value={<span className={staff.clearance === "O5" ? "text-danger" : "text-accent"}>{CLEARANCE_LABEL[staff.clearance]}</span>}

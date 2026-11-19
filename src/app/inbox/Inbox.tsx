@@ -49,7 +49,7 @@ export function Inbox() {
   if (!staff) return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
 
   const open = inbox.find((mail) => mail.id === openId);
-  const to = `${profile.name || "新任職員"} <${profile.staffNo || "unassigned"}@site81.scp.int>`;
+  const to = `${profile.name || "職員"} <${profile.staffNo || "unassigned"}@site81.scp.int>`;
 
   return (
     <TerminalShell staff={staff}>
