@@ -29,6 +29,11 @@ pnpm dev:phone
 - 自己署名証明書なので警告が出る。iPhone(Safari)は「詳細を表示」→「このWebサイトを閲覧」、Android(Chrome)は「詳細設定」→「アクセスする」で進む
 - 開発サーバーなので、生成には開発用のモデルが使われる
 
+## 報告書の出どころ
+
+初期設定では、どの写真を撮っても、`src/lib/report/samples/` に用意した見本の報告書のどれかが表示される(Gemini は呼ばない)。
+環境変数 `REPORT_SOURCE=gemini` を設定したときだけ、Gemini で写真から報告書を生成する。
+
 ## 技術構成
 
 Next.js(App Router)/ Tailwind CSS / Gemini API / Vercel。DBは使わない(報告書はブラウザの IndexedDB に保存)。

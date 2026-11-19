@@ -4,7 +4,8 @@ import unfixed from "./samples/unfixed.json";
 import waterBottle from "./samples/water-bottle.json";
 
 /**
- * 見本の報告書。REPORT_SOURCE=sample のとき、Gemini を呼ばずにこの中から1つを返す。
+ * 見本の報告書。どの写真を撮っても、Gemini を呼ばずにこの中から1つを返す。
+ * Gemini での生成は REPORT_SOURCE=gemini と明示したときだけ有効になる。
  * - tissue / water-bottle: 開発中に gemini-4-hydrogen で生成したもの(water-bottle は一部を手直し)
  * - unfixed: どの写真に添付されても成り立つよう手書きしたもの
  */
@@ -17,8 +18,9 @@ export const SAMPLE_REPORTS: SampleReport[] = [tissue, waterBottle, unfixed].map
   report: reportSchema.parse(sample.report),
 }));
 
+/** 初期設定は見本。設定の消し忘れや書き間違いで、うっかり Gemini を呼ばないようにしている */
 export function isSampleMode(): boolean {
-  return process.env.REPORT_SOURCE === "sample";
+  return process.env.REPORT_SOURCE?.trim() !== "gemini";
 }
 
 export function pickSampleReport(random: () => number = Math.random): SampleReport {
