@@ -13,7 +13,7 @@ export default function NotFound() {
         <br />
         この照会は記録されました。
       </p>
-      <Link href="/portal" className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background">
+      <Link href="/portal" className="btn btn-primary">
         ポータルに戻る
       </Link>
     </main>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
+import { BackIcon } from "@/components/Icons.tsx";
 import { RichText } from "@/components/report/RichText.tsx";
 import { ClassifiedStamp } from "@/components/report/AcsBar.tsx";
 import { useStaff } from "@/lib/client/progress.ts";
@@ -52,7 +53,7 @@ function PasscodeGate({ doc }: { doc: ArchiveDocument }) {
 
   return (
     <form onSubmit={onSubmit} className="glitch-in border border-line bg-panel/60 px-4 py-6 text-sm">
-      <p className="text-accent glow">この文書はパスコードで保護されています</p>
+      <p className="font-bold">この文書はパスコードで保護されています</p>
       <p className="mt-2 text-xs leading-6 text-muted">パスコードは、所管部門から別途通知されます。</p>
       <div className="mt-4 flex items-center gap-2 border-b border-line focus-within:border-accent">
         <span className="text-accent">&gt;</span>
@@ -67,7 +68,7 @@ function PasscodeGate({ doc }: { doc: ArchiveDocument }) {
         />
       </div>
       {message && <p className="mt-2 text-xs text-danger">{message}</p>}
-      <button type="submit" className="mt-4 w-full border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background">
+      <button type="submit" className="btn btn-primary mt-4 w-full">
         解錠する
       </button>
     </form>
@@ -84,8 +85,9 @@ export function DocumentView() {
 
   return (
     <TerminalShell staff={staff}>
-      <Link href="/library" className="mb-4 text-xs text-muted underline hover:text-foreground">
-        ← 書庫に戻る
+      <Link href="/library" className="btn btn-secondary mb-4 self-start">
+        <BackIcon className="h-4 w-4" />
+        書庫に戻る
       </Link>
       {!doc ? (
         <p className="text-sm text-danger">該当する文書は存在しません。</p>

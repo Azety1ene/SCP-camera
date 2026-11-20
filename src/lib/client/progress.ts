@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listRecords } from "./db.ts";
-import { useRequireClearance, type Clearance, type ServerClearance } from "./session.ts";
+import { fetchClearance, useRequireClearance, type Clearance, type ServerClearance } from "./session.ts";
 
 /**
  * 職員としての進み具合。収容した件数でクリアランスが上がり、読める範囲が広がる。
@@ -81,4 +81,39 @@ export function requiredForRedaction(text: string): Clearance {
   if (fraction < 0.3) return "L3";
   if (fraction < 0.6) return "L4";
   return "O5";
+}
+
+/**
+ * 認証していなくても開ける画面(規約など)で使う。
+ * 判定中は undefined、未認証なら null、認証済みなら職員の状態を返す。
+ */
+export function useOptionalStaff(): StaffState | null | undefined {
+  const [server, setServer] = useState<ServerClearance | null | undefined>(undefined);
+  const [contained, setContained] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchClearance().then(async (value) => {
+      if (cancelled) return;
+      if (!value) {
+        setServer(null);
+        return;
+      }
+      const count = await listRecords()
+        .then((records) => records.filter((record) => record.status === "done").length)
+        .catch(() => 0);
+      if (cancelled) return;
+      setContained(count);
+      setServer(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return useMemo(() => {
+    if (server === undefined) return undefined;
+    if (server === null || contained === null) return null;
+    return { server, clearance: effectiveClearance(server, contained), contained };
+  }, [server, contained]);
 }

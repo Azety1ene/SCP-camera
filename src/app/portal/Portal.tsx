@@ -118,7 +118,7 @@ function PortalBody({ staff }: { staff: StaffState }) {
       {alarm && <BreachAlarm onDone={() => setAlarm(false)} />}
 
       <p className="text-[11px] tracking-[0.4em] text-muted">確保 ・ 収容 ・ 保護</p>
-      <h1 className="mt-2 text-lg text-accent glow">
+      <h1 className="mt-2 text-xl font-bold leading-snug">
         {greeting(hour)}、{callName}
       </h1>
       {night && (
@@ -160,7 +160,7 @@ function PortalBody({ staff }: { staff: StaffState }) {
           <Link
             href="/scan"
             onClick={() => play("tap")}
-            className="mt-4 block border border-accent px-4 py-2 text-center text-sm text-accent hover:bg-accent hover:text-background"
+            className="btn btn-primary btn-lg mt-4 w-full"
           >
             観測を開始する
           </Link>
@@ -194,10 +194,10 @@ function PortalBody({ staff }: { staff: StaffState }) {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <Link href="/library" className="border border-line px-4 py-3 text-center text-muted hover:text-foreground">
+        <Link href="/library" className="btn btn-secondary">
           書庫
         </Link>
-        <Link href="/id" className="border border-line px-4 py-3 text-center text-muted hover:text-foreground">
+        <Link href="/id" className="btn btn-secondary">
           職員証
         </Link>
       </div>

@@ -265,7 +265,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
 
   if (!powered) {
     return (
-      <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-8 px-4 py-16 text-center text-sm leading-7">
+      <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-8 px-4 py-16 text-center font-mono text-sm leading-7">
         <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
         <div className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-muted">SECURE ・ CONTAIN ・ PROTECT</p>
@@ -278,7 +278,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
             play("power");
             setPowered(true);
           }}
-          className="border border-accent px-8 py-4 tracking-widest text-accent glow hover:bg-accent hover:text-background"
+          className="btn btn-primary btn-lg min-w-64 font-mono tracking-widest"
         >
           <span className="cursor">[ 端末を起動する ]</span>
         </button>
@@ -288,7 +288,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
   }
 
   return (
-    <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 text-sm leading-7">
+    <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 font-mono text-sm leading-7">
       <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
       <div className="flex-1 space-y-0.5">
         {lines.map((line, index) => (
@@ -313,14 +313,14 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
                   play("tap");
                   router.push("/portal");
                 }}
-                className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background"
+                className="btn btn-primary"
               >
                 端末に入る
               </button>
               <button
                 type="button"
                 onClick={() => setExisting(null)}
-                className="border border-line px-4 py-2 text-muted hover:text-foreground"
+                className="btn btn-secondary"
               >
                 別のコードで認証する
               </button>
@@ -353,7 +353,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
             <button
               type="submit"
               disabled={busy || lockedFor > 0 || !code.trim()}
-              className="mt-5 w-full border border-accent px-4 py-3 text-accent hover:bg-accent hover:text-background disabled:border-line disabled:text-muted"
+              className="btn btn-primary btn-lg mt-5 w-full"
             >
               {busy ? "照合中 …" : lockedFor > 0 ? `端末ロック中(${lockedFor})` : "認証する"}
             </button>

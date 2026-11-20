@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
+import { BackIcon } from "@/components/Icons.tsx";
 import { RichText } from "@/components/report/RichText.tsx";
 import { useStaff } from "@/lib/client/progress.ts";
 import { markMailRead, useInbox, useProfile, type InboxItem } from "@/lib/client/store.ts";
@@ -16,8 +17,9 @@ function formatDate(time: number) {
 function MailView({ mail, to, clearance, onBack }: { mail: InboxItem; to: string; clearance: Clearance; onBack: () => void }) {
   return (
     <div className="glitch-in">
-      <button type="button" onClick={onBack} className="mb-4 text-xs text-muted underline hover:text-foreground">
-        ← 受信箱に戻る
+      <button type="button" onClick={onBack} className="btn btn-secondary mb-4">
+        <BackIcon className="h-4 w-4" />
+        受信箱に戻る
       </button>
       <article className="bg-paper font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)]">
         <dl className="grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-0.5 border-b border-ink/20 bg-ink/[0.05] px-5 py-3 font-mono text-[11px] leading-5">
@@ -57,7 +59,7 @@ export function Inbox() {
         <MailView mail={open} to={to} clearance={staff.clearance} onBack={() => setOpenId(null)} />
       ) : (
         <>
-          <h1 className="text-lg text-accent glow">受信箱</h1>
+          <h1 className="text-xl font-bold">受信箱</h1>
           <p className="mt-1 text-xs text-muted">所属部門・人事局からの通知が届きます。本端末のメールは、端末の外へ持ち出すことができません。</p>
           {inbox.length === 0 ? (
             <p className="mt-8 text-sm text-muted">メールはまだ届いていません。</p>

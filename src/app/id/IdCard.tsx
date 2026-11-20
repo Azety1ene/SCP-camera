@@ -86,21 +86,21 @@ function PhotoBooth({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-background/95 px-6">
-      <p className="text-sm text-accent glow">証明写真の撮影</p>
+      <p className="text-base font-bold">証明写真の撮影</p>
       <div className="relative aspect-square w-full max-w-xs overflow-hidden border border-line bg-black">
         <video ref={videoRef} playsInline muted className="h-full w-full -scale-x-100 object-cover grayscale" />
         <div aria-hidden className="pointer-events-none absolute inset-[18%] rounded-full border border-dashed border-accent/60" />
       </div>
       {error ? <p className="text-xs text-danger">{error}</p> : <p className="text-xs text-muted">枠の中に顔を合わせてください。</p>}
       <div className="flex gap-3 text-sm">
-        <button type="button" onClick={onClose} className="border border-line px-4 py-2 text-muted hover:text-foreground">
+        <button type="button" onClick={onClose} className="btn btn-secondary">
           やめる
         </button>
         <button
           type="button"
           onClick={shoot}
           disabled={busy || !!error}
-          className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background disabled:opacity-40"
+          className="btn btn-primary"
         >
           撮影する
         </button>
@@ -146,7 +146,7 @@ export function IdCard() {
   return (
     <TerminalShell staff={staff}>
       {booth && <PhotoBooth onClose={() => setBooth(false)} />}
-      <h1 className="text-lg text-accent glow">職員証</h1>
+      <h1 className="text-xl font-bold">職員証</h1>
       <p className="mt-1 text-xs text-muted">職員証はサイト内で常に携行してください。紛失した場合は、ただちに人事局に届け出てください。</p>
 
       {/* 職員証 */}
@@ -206,16 +206,16 @@ export function IdCard() {
             placeholder="氏名を入力"
             className="min-w-0 flex-1 border-b border-line bg-transparent py-2 text-foreground outline-none focus:border-accent"
           />
-          <button type="submit" className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background">
+          <button type="submit" className="btn btn-primary">
             登録
           </button>
         </div>
       </form>
       <div className="mx-auto mt-4 grid w-full max-w-sm grid-cols-2 gap-3 text-sm">
-        <button type="button" onClick={() => setBooth(true)} className="border border-line px-4 py-2 text-muted hover:text-foreground">
+        <button type="button" onClick={() => setBooth(true)} className="btn btn-secondary">
           証明写真を撮影
         </button>
-        <button type="button" onClick={onExport} className="border border-line px-4 py-2 text-muted hover:text-foreground">
+        <button type="button" onClick={onExport} className="btn btn-secondary">
           画像で保存
         </button>
       </div>

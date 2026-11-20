@@ -15,7 +15,7 @@ export function Library() {
 
   return (
     <TerminalShell staff={staff}>
-      <h1 className="text-lg text-accent glow">書庫</h1>
+      <h1 className="text-xl font-bold">書庫</h1>
       <p className="mt-1 text-xs text-muted">観測記録部門の職員が閲覧できる内部文書。閲覧できる範囲は、クリアランスに応じて変わります。</p>
 
       <ul className="mt-6 space-y-3">

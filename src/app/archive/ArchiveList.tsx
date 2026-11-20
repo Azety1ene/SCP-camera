@@ -39,7 +39,7 @@ export function ArchiveList() {
 
   return (
     <TerminalShell staff={staff}>
-      <h1 className="text-lg text-accent glow">収容記録</h1>
+      <h1 className="text-xl font-bold">収容記録</h1>
       <p className="mt-1 text-xs text-muted">この端末で作成された報告書の一覧。記録はこの端末の内部にのみ保存されています。</p>
 
       {records === null && <p className="mt-8 text-sm text-muted">記録を読み込み中 …</p>}
@@ -70,7 +70,7 @@ export function ArchiveList() {
               <button
                 type="button"
                 onClick={() => onDelete(record)}
-                className="w-full border-t border-line py-1.5 text-[11px] text-muted hover:text-danger"
+                className="flex min-h-11 w-full items-center justify-center border-t border-line text-xs text-muted hover:bg-danger/10 hover:text-danger"
               >
                 抹消
               </button>

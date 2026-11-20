@@ -249,7 +249,7 @@ export function ScanCamera() {
         <Corners />
 
         {/* 映像上の表示 */}
-        <div className="pointer-events-none absolute inset-x-8 top-7 flex justify-between text-[11px] text-foreground/90 glow">
+        <div className="pointer-events-none absolute inset-x-8 top-7 flex justify-between font-mono text-[11px] text-foreground/90">
           <span>{camId}</span>
           <span className="tabular-nums">{now}</span>
         </div>
@@ -259,13 +259,13 @@ export function ScanCamera() {
         <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 border border-accent/40">
           <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 bg-accent/80" />
         </div>
-        <div className="pointer-events-none absolute inset-x-8 bottom-36 flex items-end justify-between text-[11px] text-accent glow">
+        <div className="pointer-events-none absolute inset-x-8 bottom-36 flex items-end justify-between font-mono text-[11px] text-accent">
           <span key={messageIndex} className="glitch-in">
             {SCAN_MESSAGES[messageIndex]} …
           </span>
           <span className="tabular-nums">ヒューム値 {hume} Hm</span>
         </div>
-        <div className="pointer-events-none absolute inset-x-8 bottom-[7.5rem] text-[11px]">
+        <div className="pointer-events-none absolute inset-x-8 bottom-[7.5rem] font-mono text-[11px]">
           {facesInView > 0 ? (
             <span className="text-warn">人物を検出 ── 自動編集を適用中({facesInView})</span>
           ) : (
@@ -287,7 +287,7 @@ export function ScanCamera() {
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="pointer-events-auto border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background"
+              className="btn btn-primary pointer-events-auto"
             >
               記録画像を読み込む
             </button>
@@ -303,11 +303,10 @@ export function ScanCamera() {
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={capturing}
-            className="w-16 text-[11px] text-muted hover:text-foreground disabled:opacity-40"
+            className="btn btn-secondary h-14 w-16 flex-col gap-0 px-0 text-[10px] leading-tight"
           >
-            画像を
-            <br />
-            読み込む
+            <span className="text-base leading-none">＋</span>
+            画像
           </button>
           <button
             type="button"

@@ -106,7 +106,7 @@ function QueryLog({ startedAt, photoUrl }: { startedAt: number; photoUrl: string
         <div aria-hidden className="sweep absolute inset-x-0 top-0 h-[10%] bg-gradient-to-b from-transparent via-accent/25 to-transparent" />
       </div>
       <div className="text-sm leading-7">
-        <p className="text-accent glow">財団データベースに照会中</p>
+        <p className="font-bold text-accent">財団データベースに照会中</p>
         <p className="mb-3 text-xs text-muted">経過 {formatElapsed(elapsed)} ／ 照会には数分かかることがあります。この画面を開いたままお待ちください。</p>
         {QUERY_STEPS.slice(0, shown).map((step) => (
           <p key={step} className="glitch-in text-muted">
@@ -126,7 +126,7 @@ function RatingBox({ recordId }: { recordId: string }) {
     play("tap");
     setRating(recordId, value === next ? 0 : next);
   };
-  const base = "h-7 w-7 border font-mono text-sm leading-none";
+  const base = "h-10 w-10 rounded-md border font-mono text-base leading-none";
   return (
     <div className="mt-4 flex items-center gap-2 font-mono text-xs text-muted">
       <span>評価: {value > 0 ? `+${value}` : value}</span>
@@ -269,12 +269,12 @@ export function ReportView() {
               <button
                 type="button"
                 onClick={() => runQuery(record)}
-                className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background"
+                className="btn btn-primary"
               >
                 再照会する
               </button>
             )}
-            <button type="button" onClick={onDiscard} className="border border-line px-4 py-2 text-muted hover:text-foreground">
+            <button type="button" onClick={onDiscard} className="btn btn-secondary">
               記録を破棄する
             </button>
           </div>
@@ -297,11 +297,11 @@ export function ReportView() {
               type="button"
               onClick={onExport}
               disabled={exporting}
-              className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background disabled:opacity-50"
+              className="btn btn-primary"
             >
               {exporting ? "書き出し中 …" : "報告書を画像で保存"}
             </button>
-            <Link href="/scan" className="border border-line px-4 py-2 text-muted hover:text-foreground">
+            <Link href="/scan" className="btn btn-secondary">
               次の対象を観測する
             </Link>
           </div>
