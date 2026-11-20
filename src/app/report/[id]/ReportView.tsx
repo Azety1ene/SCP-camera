@@ -9,6 +9,7 @@ import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@
 import { useStaff } from "@/lib/client/progress.ts";
 import { useObjectUrl } from "@/lib/client/useObjectUrl.ts";
 import { play } from "@/lib/client/sound.ts";
+import { forgetPhoto, photoBytes } from "@/lib/client/upload-cache.ts";
 import { setRating, useRatings } from "@/lib/client/store.ts";
 import type { GeneratedReport } from "@/lib/report/schema.ts";
 
@@ -53,9 +54,14 @@ async function runQuery(current: ContainmentRecord) {
 
   let patch: Partial<ContainmentRecord>;
   try {
-    const form = new FormData();
-    form.append("image", new File([current.photo], "capture.jpg", { type: "image/jpeg" }));
-    const res = await fetch("/api/generate", { method: "POST", body: form });
+    // 写真のデータを先に読み出しておく(保存先の Blob をそのまま送ると、iPhone で送信に失敗することがある)
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await photoBytes(current.id, current.photo);
+    } catch (error) {
+      throw new QueryError("read", error);
+    }
+    const res = await postWithRetry(bytes);
     let body: GenerateResponse | null = null;
     try {
       body = (await res.json()) as GenerateResponse;
@@ -69,14 +75,55 @@ async function runQuery(current: ContainmentRecord) {
     } else {
       patch = { status: "done", itemNumber: body.itemNumber, tone: body.tone, report: body.report };
     }
-  } catch {
-    patch = { status: "error", error: { code: "network", message: "財団回線との接続が切断されました。" } };
+  } catch (error) {
+    // 原因を突き止められるよう、ブラウザが返した理由もエラーコードに含める
+    const stage = error instanceof QueryError ? error.stage : "network";
+    const cause = error instanceof QueryError ? error.cause : error;
+    const reason = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
+    console.error("[query]", stage, cause);
+    patch = {
+      status: "error",
+      error: {
+        code: `${stage} / ${reason}`.slice(0, 120),
+        message: stage === "read" ? "記録画像を読み出せませんでした。" : "財団回線との接続が切断されました。",
+      },
+    };
   } finally {
     inFlight.delete(current.id);
   }
+  if (patch.status === "done") forgetPhoto(current.id);
   await updateRecord(current.id, patch);
   announce(current.id);
   play(patch.status === "done" ? "complete" : "deny");
+}
+
+class QueryError extends Error {
+  constructor(
+    readonly stage: "read" | "network",
+    readonly cause: unknown,
+  ) {
+    super(stage);
+  }
+}
+
+/** 送信する。通信そのものに失敗したら、少し待って1回だけ送り直す */
+async function postWithRetry(bytes: ArrayBuffer): Promise<Response> {
+  const send = () => {
+    const form = new FormData();
+    form.append("image", new Blob([bytes], { type: "image/jpeg" }), "capture.jpg");
+    return fetch("/api/generate", { method: "POST", body: form });
+  };
+  try {
+    return await send();
+  } catch (first) {
+    console.warn("[query] 送信に失敗したので送り直します", first);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      return await send();
+    } catch (second) {
+      throw new QueryError("network", second);
+    }
+  }
 }
 
 type GenerateResponse =

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { cctvTimestamp, drawToCanvas, toCctvJpeg, toSourceJpeg } from "@/lib/client/cctv.ts";
 import { newRecordId, saveRecord } from "@/lib/client/db.ts";
+import { rememberPhoto } from "@/lib/client/upload-cache.ts";
 import { useStaff } from "@/lib/client/progress.ts";
 import { detectFaces, drawRedactions, loadFaceDetector, padBox, redactFacesOnCanvas } from "@/lib/client/faces.ts";
 import { play, startHum, stopHum } from "@/lib/client/sound.ts";
@@ -194,6 +195,8 @@ export function ScanCamera() {
     await redactFacesOnCanvas(canvas);
     const [photo, photoFiltered] = await Promise.all([toSourceJpeg(canvas), toCctvJpeg(canvas, { camId, at })]);
     const id = newRecordId();
+    // 送信には、保存先を経由しないメモリ上のデータを使う(upload-cache.ts を参照)
+    await rememberPhoto(id, photo);
     await saveRecord({ id, createdAt: at.getTime(), status: "pending", photo, photoFiltered });
     router.push(`/report/${id}`);
     // Next.js は離れた画面の状態を残し、戻ってきたときにそのまま使う。
