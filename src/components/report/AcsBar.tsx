@@ -77,16 +77,19 @@ function RiskIcon({ level, color }: { level: number; color: string }) {
   );
 }
 
+/** 表の1欄。色は記号と値だけに使い、欄の片側に色線は引かない */
 function Cell({ label, value, note, color, icon }: { label: string; value: string; note: string; color: string; icon: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 border-l-4 bg-white/60 px-2 py-1.5" style={{ borderColor: color }}>
-      {icon}
-      <div className="min-w-0 leading-tight">
-        <p className="font-mono text-[9px] tracking-wider text-ink/60">{label}</p>
-        <p className="truncate font-mono text-[13px] font-bold" style={{ color }}>
-          {value}
-        </p>
-        <p className="text-[9px] text-ink/60">{note}</p>
+    <div className="flex flex-col">
+      <p className="border-b border-ink/25 bg-ink/[0.06] px-2 py-1 text-[10px] tracking-wider text-ink/70">{label}</p>
+      <div className="flex items-center gap-2 px-2 py-2">
+        {icon}
+        <div className="min-w-0 leading-tight">
+          <p className="truncate font-mono text-[13px] font-bold" style={{ color }}>
+            {value}
+          </p>
+          <p className="text-[10px] text-ink/60">{note}</p>
+        </div>
       </div>
     </div>
   );
@@ -98,28 +101,28 @@ export function AcsBar({ itemNumber, report }: { itemNumber: string; report: Sto
   const risk = report.riskClass ? RISK_CLASSES.indexOf(report.riskClass) : -1;
 
   return (
-    <div className="mt-4 border border-ink/30 bg-ink/[0.04] p-2">
-      <div className="mb-2 flex items-center justify-between font-mono text-[10px] tracking-wider text-ink/70">
+    <div className="mt-4 border border-ink/50">
+      <div className="flex items-center justify-between border-b border-ink/50 px-2 py-1 font-mono text-[10px] tracking-wider text-ink/80">
         <span>{itemNumber}</span>
-        <span>異常分類システム</span>
+        <span>異常分類</span>
       </div>
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+      <div className="grid grid-cols-3 divide-x divide-ink/25">
         <Cell
-          label="収容クラス"
+          label="収容"
           value={report.objectClass}
           note={CONTAINMENT_LABEL[report.objectClass] ?? ""}
           color={containmentColor}
           icon={<ContainmentIcon color={containmentColor} />}
         />
         <Cell
-          label="撹乱クラス"
+          label="撹乱"
           value={disruption >= 0 ? report.disruptionClass! : "Pending"}
           note={disruption >= 0 ? DISRUPTION_LABEL[disruption] : "情報不足"}
           color={disruption >= 0 ? SCALE_COLORS[disruption] : "#5f6670"}
           icon={<DisruptionIcon level={Math.max(0, disruption)} color={disruption >= 0 ? SCALE_COLORS[disruption] : "#5f6670"} />}
         />
         <Cell
-          label="リスククラス"
+          label="リスク"
           value={risk >= 0 ? report.riskClass! : "Pending"}
           note={risk >= 0 ? RISK_LABEL[risk] : "情報不足"}
           color={risk >= 0 ? SCALE_COLORS[risk] : "#5f6670"}
@@ -130,15 +133,57 @@ export function AcsBar({ itemNumber, report }: { itemNumber: string; report: Sto
   );
 }
 
+/** 朱肉の丸い印。2文字を縦に並べる */
+function Seal({ text }: { text: string }) {
+  return (
+    <span
+      className="flex h-9 w-9 rotate-[-6deg] flex-col items-center justify-center rounded-full border-[1.5px] border-[#b8392c] font-doc text-[10px] font-bold leading-[1.05] text-[#b8392c] opacity-85 mix-blend-multiply"
+      aria-label={`${text}の印`}
+    >
+      {[...text].map((ch, i) => (
+        <span key={i}>{ch}</span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * 公文書の決裁欄(起案・審査・承認)。押されていない欄は空欄のまま。
+ * stamps は各欄に押す2文字。null なら未決裁
+ */
+export function ApprovalBox({ stamps }: { stamps: [string | null, string | null, string | null] }) {
+  const labels = ["起案", "審査", "承認"];
+  return (
+    <table className="border-collapse text-center text-[9px] text-ink/70" aria-label="決裁欄">
+      <tbody>
+        <tr>
+          {labels.map((label) => (
+            <th key={label} className="w-11 border border-ink/50 py-0.5 font-normal">
+              {label}
+            </th>
+          ))}
+        </tr>
+        <tr>
+          {stamps.map((stamp, i) => (
+            <td key={i} className="h-11 border border-ink/50">
+              <span className="flex items-center justify-center">{stamp ? <Seal text={stamp} /> : null}</span>
+            </td>
+          ))}
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
 /** 文書の右上に押される機密の印 */
 export function ClassifiedStamp() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute right-4 top-14 rotate-[-9deg] select-none border-[3px] border-[#a3241a] px-2 py-0.5 text-center font-mono leading-tight text-[#a3241a] opacity-75 mix-blend-multiply sm:right-8"
+      className="pointer-events-none absolute -top-1 right-0 rotate-[-9deg] select-none border-[3px] border-[#b8392c] px-2 py-0.5 text-center font-doc leading-tight text-[#b8392c] opacity-80 mix-blend-multiply"
     >
       <p className="text-lg font-bold tracking-[0.3em]">機密</p>
-      <p className="text-[9px] tracking-[0.25em]">CLASSIFIED</p>
+      <p className="font-mono text-[8px] tracking-[0.25em]">CLASSIFIED</p>
     </div>
   );
 }

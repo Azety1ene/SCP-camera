@@ -293,7 +293,7 @@ export function ReportView() {
   }
 
   return (
-    <TerminalShell staff={staff}>
+    <TerminalShell staff={staff} screen={{ id: "OBS-0210", name: "報告書" }}>
       {record === null && (
         <div className="space-y-4 text-sm leading-7">
           <p className="text-danger">該当する記録は存在しません。</p>
@@ -329,7 +329,7 @@ export function ReportView() {
       )}
 
       {record?.status === "done" && record.report && record.itemNumber && photoUrl && (
-        <div className="glitch-in">
+        <div>
           <ReportDocument
             ref={documentRef}
             itemNumber={record.itemNumber}

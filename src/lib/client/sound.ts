@@ -117,18 +117,24 @@ export function unlockAudio() {
     if (!Ctor) return;
     const ctx = new Ctor();
 
-    // 出力: 高域を少し落とす → 軽いコンプレッサー → 音量
+    // 出力: 高域を少し落とす → 軽いコンプレッサー → 音量 → リミッター(音割れを防ぐ)
     const master = ctx.createGain();
-    master.gain.value = 0.9;
+    master.gain.value = 1.8;
     const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -18;
+    compressor.threshold.value = -20;
     compressor.ratio.value = 3;
     compressor.attack.value = 0.004;
     compressor.release.value = 0.2;
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -2;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.08;
     const tone = ctx.createBiquadFilter();
     tone.type = "lowpass";
     tone.frequency.value = 9000;
-    tone.connect(compressor).connect(master).connect(ctx.destination);
+    tone.connect(compressor).connect(master).connect(limiter).connect(ctx.destination);
 
     const dry = ctx.createGain();
     dry.connect(tone);

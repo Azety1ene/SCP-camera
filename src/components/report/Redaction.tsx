@@ -42,7 +42,7 @@ export function Redacted({ children, required }: { children: ReactNode; required
         <span
           key={`notice-${denied}`}
           role="status"
-          className="glitch-in pointer-events-none fixed inset-x-4 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 mx-auto block max-w-sm border border-[#e2675a] bg-[#1a0806] px-4 py-3 text-center font-mono text-[12px] leading-6 not-italic text-[#f0b9b0] shadow-lg"
+          className="pointer-events-none fixed inset-x-4 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 mx-auto block max-w-sm border border-[#e2675a] bg-[#1a0806] px-4 py-3 text-center font-mono text-[12px] leading-6 not-italic text-[#f0b9b0] shadow-lg"
         >
           <span className="block font-bold tracking-widest text-[#e2675a]">ACCESS DENIED</span>
           閲覧権限がありません ── 要求クリアランス: {CLEARANCE_LABEL[required]}

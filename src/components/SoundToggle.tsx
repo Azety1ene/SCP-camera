@@ -5,29 +5,31 @@ import { play, setSoundEnabled, unlockAudio, useSoundEnabled } from "@/lib/clien
 import { SpeakerIcon } from "@/components/Icons.tsx";
 
 /**
- * 効果音のオン/オフ。今どちらの状態かが一目で分かるよう、
- * アイコン(スピーカー / ×付きのスピーカー)と「ON / OFF」の文字と色の3つで示す。
+ * 効果音の入/切。機器のスイッチのように「入」「切」の2つを並べ、今の位置を白黒反転で示す。
+ * どちらを押しても、その状態に切り替わる。
  */
 export function SoundToggle({ className = "" }: { className?: string }) {
   const enabled = useSoundEnabled();
+  const set = (next: boolean) => {
+    unlockAudio();
+    if (next === enabled) return;
+    setSoundEnabled(next);
+    if (next) play("tap");
+  };
+  const segment = (active: boolean) =>
+    `flex h-full min-w-9 items-center justify-center px-2 ${active ? "bg-foreground text-[#111416]" : "text-muted hover:text-foreground"}`;
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      aria-label={enabled ? "効果音: オン(押すとオフ)" : "効果音: オフ(押すとオン)"}
-      onClick={() => {
-        unlockAudio();
-        setSoundEnabled(!enabled);
-        if (!enabled) play("tap");
-      }}
-      className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 font-mono text-[11px] font-bold tracking-wider transition-colors ${
-        enabled ? "border-accent/70 bg-accent/15 text-accent" : "border-line bg-raised text-muted"
-      } ${className}`}
-    >
-      <SpeakerIcon muted={!enabled} className="h-4 w-4" />
-      {enabled ? "ON" : "OFF"}
-    </button>
+    <div role="group" aria-label="効果音" className={`flex h-9 items-center gap-1.5 text-[11px] ${className}`}>
+      <SpeakerIcon muted={!enabled} className={`h-4 w-4 ${enabled ? "text-foreground" : "text-muted"}`} />
+      <span className="flex h-8 items-stretch border border-[#48535a] font-bold">
+        <button type="button" aria-pressed={enabled} onClick={() => set(true)} className={segment(enabled)}>
+          入
+        </button>
+        <button type="button" aria-pressed={!enabled} onClick={() => set(false)} className={`${segment(!enabled)} border-l border-[#48535a]`}>
+          切
+        </button>
+      </span>
+    </div>
   );
 }
 

@@ -144,9 +144,9 @@ export function IdCard() {
   }
 
   return (
-    <TerminalShell staff={staff}>
+    <TerminalShell staff={staff} screen={{ id: "PER-0600", name: "職員証" }}>
       {booth && <PhotoBooth onClose={() => setBooth(false)} />}
-      <h1 className="text-xl font-bold">職員証</h1>
+      <h1 className="font-doc text-xl font-bold">職員証</h1>
       <p className="mt-1 text-xs text-muted">職員証はサイト内で常に携行してください。紛失した場合は、ただちに人事局に届け出てください。</p>
 
       {/* 職員証 */}

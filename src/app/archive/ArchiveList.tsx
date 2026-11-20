@@ -38,8 +38,8 @@ export function ArchiveList() {
   if (!clearance) return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
 
   return (
-    <TerminalShell staff={staff}>
-      <h1 className="text-xl font-bold">収容記録</h1>
+    <TerminalShell staff={staff} screen={{ id: "ARC-0300", name: "収容記録" }}>
+      <h1 className="font-doc text-xl font-bold">収容記録</h1>
       <p className="mt-1 text-xs text-muted">この端末で作成された報告書の一覧。記録はこの端末の内部にのみ保存されています。</p>
 
       {records === null && <p className="mt-8 text-sm text-muted">記録を読み込み中 …</p>}
@@ -56,7 +56,7 @@ export function ArchiveList() {
       {records && records.length > 0 && (
         <ul className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
           {records.map((record) => (
-            <li key={record.id} className="glitch-in border border-line bg-panel">
+            <li key={record.id} className="border border-line bg-panel">
               <Link href={`/report/${record.id}`} className="block hover:opacity-90">
                 <Thumbnail blob={record.photoFiltered} alt={record.itemNumber ?? "記録画像"} />
                 <div className="space-y-0.5 p-2 text-[11px] leading-5">

@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { BackIcon } from "@/components/Icons.tsx";
 import { RichText } from "@/components/report/RichText.tsx";
-import { ClassifiedStamp } from "@/components/report/AcsBar.tsx";
+import { ApprovalBox, ClassifiedStamp } from "@/components/report/AcsBar.tsx";
 import { useStaff } from "@/lib/client/progress.ts";
 import { CLEARANCE_LABEL, hasClearance } from "@/lib/client/session.ts";
 import { unlockDoc, useUnlockedDocs } from "@/lib/client/store.ts";
@@ -18,7 +18,7 @@ function Denied({ doc, clearance }: { doc: ArchiveDocument; clearance: string })
     play("deny");
   }, []);
   return (
-    <div className="glitch-in border-2 border-danger/70 px-4 py-8 text-center">
+    <div className="border-2 border-danger/70 px-4 py-8 text-center">
       <p className="text-sm font-bold tracking-[0.3em] text-danger">ACCESS DENIED</p>
       <p className="mt-3 text-xs leading-6 text-muted">
         この文書の閲覧には {CLEARANCE_LABEL[doc.required]} 以上のクリアランスが必要です。
@@ -52,7 +52,7 @@ function PasscodeGate({ doc }: { doc: ArchiveDocument }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="glitch-in border border-line bg-panel/60 px-4 py-6 text-sm">
+    <form onSubmit={onSubmit} className="ledger px-0 py-6 text-sm">
       <p className="font-bold">この文書はパスコードで保護されています</p>
       <p className="mt-2 text-xs leading-6 text-muted">パスコードは、所管部門から別途通知されます。</p>
       <div className="mt-4 flex items-center gap-2 border-b border-line focus-within:border-accent">
@@ -84,7 +84,7 @@ export function DocumentView() {
   if (!staff) return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
 
   return (
-    <TerminalShell staff={staff}>
+    <TerminalShell staff={staff} screen={{ id: "LIB-0410", name: "文書閲覧" }}>
       <Link href="/library" className="btn btn-secondary mb-4 self-start">
         <BackIcon className="h-4 w-4" />
         書庫に戻る
@@ -96,14 +96,22 @@ export function DocumentView() {
       ) : doc.passcode && staff.clearance !== "O5" && !unlocked.includes(doc.id) ? (
         <PasscodeGate doc={doc} />
       ) : (
-        <article className="glitch-in relative bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink pb-2 font-mono text-[11px] tracking-wider">
-            <span>{doc.issuer}</span>
-            <span>{doc.number}</span>
+        <article className="relative bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">
+          <div className="flex items-start justify-between gap-4 border-b-2 border-ink pb-3">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[10.5px] leading-5 text-ink/80">
+              <dt>発行</dt>
+              <dd>{doc.issuer}</dd>
+              <dt>番号</dt>
+              <dd>{doc.number.replace(/^(文書番号|掲示物) /, "")}</dd>
+              <dt>区分</dt>
+              <dd>{CLEARANCE_LABEL[doc.required]} 以上</dd>
+            </dl>
+            <ApprovalBox stamps={doc.stamps} />
           </div>
-          {doc.required !== "L2" && <ClassifiedStamp />}
-          <h2 className="mt-6 pr-20 text-xl font-bold leading-snug">{doc.title}</h2>
-          <p className="mt-1 font-mono text-[11px] text-ink/60">閲覧区分: {CLEARANCE_LABEL[doc.required]} 以上</p>
+          <div className="relative">
+            <h2 className="mt-6 pr-16 text-xl font-bold leading-snug">{doc.title}</h2>
+            {doc.required !== "L2" && <ClassifiedStamp />}
+          </div>
           <div className="mt-4">
             <RichText text={doc.body} clearance={staff.clearance} className="mb-3" />
           </div>

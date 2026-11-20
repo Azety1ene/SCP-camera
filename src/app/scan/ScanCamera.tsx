@@ -237,7 +237,7 @@ export function ScanCamera() {
   }
 
   return (
-    <TerminalShell staff={staff} bare>
+    <TerminalShell staff={staff} screen={{ id: "OBS-0200", name: "観測" }} bare>
       <div className="relative flex-1 overflow-hidden bg-black">
         <video
           ref={videoRef}

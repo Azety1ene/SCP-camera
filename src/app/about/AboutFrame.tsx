@@ -17,12 +17,12 @@ export function AboutFrame({ children }: { children: ReactNode }) {
 
   const body = (
     <div className="space-y-8 text-sm leading-7">
-      <h1 className="text-xl font-bold">規約・ライセンス</h1>
+      <h1 className="font-doc text-xl font-bold">規約・ライセンス</h1>
       {children}
     </div>
   );
 
-  if (staff) return <TerminalShell staff={staff}>{body}</TerminalShell>;
+  if (staff) return <TerminalShell staff={staff} screen={{ id: "SYS-0900", name: "規約" }}>{body}</TerminalShell>;
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-12 pt-[max(1rem,env(safe-area-inset-top))]">

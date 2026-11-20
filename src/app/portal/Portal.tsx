@@ -9,10 +9,14 @@ import { useInbox, useProfile } from "@/lib/client/store.ts";
 import { play } from "@/lib/client/sound.ts";
 import { newsForToday } from "@/lib/content/news.ts";
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+/** 帳票の一区画。箱で囲まず、上の太い罫線と見出しで区切る */
+function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="border border-line bg-panel/60 p-4">
-      <h2 className="mb-3 text-[11px] tracking-[0.2em] text-muted">{title}</h2>
+    <section className="ledger">
+      <div className="ledger-title flex items-baseline justify-between">
+        <h2>{title}</h2>
+        {aside && <span className="font-ui text-[11px] font-normal text-muted">{aside}</span>}
+      </div>
       {children}
     </section>
   );
@@ -20,9 +24,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-line/60 py-1.5 text-xs last:border-0">
+    <div className="ledger-row">
       <span className="text-muted">{label}</span>
-      <span className="text-right text-foreground">{value}</span>
+      <span className="text-right font-mono text-[13px] text-foreground">{value}</span>
     </div>
   );
 }
@@ -108,102 +112,96 @@ function PortalBody({ staff }: { staff: StaffState }) {
   const night = hour >= 22 || hour < 5;
   const next = nextPromotion(staff.contained, staff.clearance);
   const previousAt = [...PROMOTIONS].reverse().find((p) => staff.contained >= p.at)?.at ?? 0;
-  const progress = next ? (staff.contained - previousAt) / (next.at - previousAt) : 1;
   const unread = inbox.filter((mail) => !mail.read);
   const observatory = `81-OP-${terminalId.slice(-4)}`;
   const callName = profile.name || (profile.staffNo ? `職員 ${profile.staffNo}` : "新任職員");
 
   return (
-    <TerminalShell staff={staff}>
+    <TerminalShell staff={staff} screen={{ id: "PTL-0100", name: "ポータル" }}>
       {alarm && <BreachAlarm onDone={() => setAlarm(false)} />}
 
-      <p className="text-[11px] tracking-[0.4em] text-muted">確保 ・ 収容 ・ 保護</p>
-      <h1 className="mt-2 text-xl font-bold leading-snug">
+      <h1 className="text-lg font-bold leading-snug">
         {greeting(hour)}、{callName}
       </h1>
       {night && (
-        <p className="mt-2 border-l-2 border-warn pl-3 text-xs leading-6 text-warn">
-          夜間当直の時間帯です。観測業務は通常どおり行えますが、照会結果に通常と異なる記載が含まれる場合があります。
+        <p className="mt-3 bg-warn/10 px-3 py-2 text-xs leading-6 text-warn">
+          【夜間当直】観測業務は通常どおり行えますが、照会結果に通常と異なる記載が含まれる場合があります。
         </p>
       )}
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        <Panel title="配属">
-          <Row label="観測所" value={observatory} />
+      {/* 観測実績: この画面で一番大事なものなので、最初に大きく置く */}
+      <section className="mt-6 ledger">
+        <div className="ledger-title flex items-baseline justify-between">
+          <h2>観測実績</h2>
+          <span className="font-ui text-[11px] font-normal text-muted">{observatory}</span>
+        </div>
+        <div className="flex items-end justify-between gap-4 py-4">
+          <p className="font-mono text-5xl leading-none tabular-nums">
+            {staff.contained}
+            <span className="ml-2 font-ui text-sm text-muted">件 収容</span>
+          </p>
+          <p className="pb-1 text-right text-xs leading-5 text-muted">
+            {next ? (
+              <>
+                {CLEARANCE_LABEL[next.level]}の昇格審査まで
+                <br />
+                あと <span className="font-mono text-base text-foreground">{next.at - staff.contained}</span> 件
+              </>
+            ) : staff.clearance === "O5" ? (
+              "O5権限:全記録を閲覧可"
+            ) : (
+              "現職位の閲覧範囲の上限"
+            )}
+          </p>
+        </div>
+        {next && (
+          <div className="mb-4 flex gap-1" aria-hidden>
+            {Array.from({ length: next.at - previousAt }, (_, i) => (
+              <span key={i} className={`h-2 flex-1 ${i < staff.contained - previousAt ? "bg-foreground" : "bg-line"}`} />
+            ))}
+          </div>
+        )}
+        <Link href="/scan" onClick={() => play("tap")} className="btn btn-primary btn-lg w-full">
+          観測を開始する
+        </Link>
+      </section>
+
+      {unread.length > 0 && (
+        <Link href="/inbox" className="mt-6 flex items-center justify-between gap-3 border border-seal/60 px-4 py-3 text-sm hover:bg-seal/10">
+          <span className="min-w-0">
+            <span className="mr-2 font-bold text-seal">未読 {unread.length} 件</span>
+            <span className="text-foreground">{unread[0].subject}</span>
+          </span>
+          <span className="shrink-0 text-muted">開く</span>
+        </Link>
+      )}
+
+      <div className="mt-8 grid gap-8 sm:grid-cols-[1fr_1.3fr]">
+        <Section title="配属">
           <Row label="所属" value={staff.clearance === "O5" ? "O5評議会" : "サイト-81██ 観測記録部門"} />
           <Row
             label="クリアランス"
-            value={<span className={staff.clearance === "O5" ? "text-danger" : "text-accent"}>{CLEARANCE_LABEL[staff.clearance]}</span>}
+            value={<span className={staff.clearance === "O5" ? "text-seal" : "text-accent"}>{CLEARANCE_LABEL[staff.clearance]}</span>}
           />
           <Row label="着任日" value={profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString("ja-JP") : "—"} />
-        </Panel>
+        </Section>
 
-        <Panel title="観測実績">
-          <p className="text-3xl text-foreground tabular-nums">
-            {staff.contained}
-            <span className="ml-1 text-xs text-muted">件 収容</span>
-          </p>
-          {next ? (
-            <>
-              <div className="mt-3 h-1.5 w-full bg-line">
-                <div className="h-full bg-accent" style={{ width: `${Math.round(progress * 100)}%` }} />
-              </div>
-              <p className="mt-2 text-xs text-muted">
-                {CLEARANCE_LABEL[next.level]}への昇格審査まで あと {next.at - staff.contained} 件
-              </p>
-            </>
-          ) : (
-            <p className="mt-3 text-xs text-muted">
-              {staff.clearance === "O5" ? "O5権限のため、すべての記録を閲覧できます。" : "現在の職位で閲覧できる最大の範囲に達しています。"}
-            </p>
-          )}
-          <Link
-            href="/scan"
-            onClick={() => play("tap")}
-            className="btn btn-primary btn-lg mt-4 w-full"
-          >
-            観測を開始する
-          </Link>
-        </Panel>
-
-        <Panel title="受信箱">
-          {unread.length ? (
-            <>
-              <p className="text-xs text-foreground">未読のメールが {unread.length} 件あります。</p>
-              <Link href="/inbox" className="mt-2 block truncate text-xs text-accent underline">
-                {unread[0].subject}
-              </Link>
-            </>
-          ) : (
-            <p className="text-xs text-muted">未読のメールはありません。</p>
-          )}
-        </Panel>
-
-        <Panel title="財団内報">
-          <ul className="space-y-2 text-xs leading-5">
+        <Section title="財団内報" aside={now.toLocaleDateString("ja-JP")}>
+          <ul>
             {newsForToday(now)
               .slice(0, 4)
               .map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="text-accent">■</span>
+                <li key={item} className="ledger-row justify-start leading-6">
                   <span className="text-foreground/90">{item}</span>
                 </li>
               ))}
           </ul>
-        </Panel>
+        </Section>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <Link href="/library" className="btn btn-secondary">
-          書庫
-        </Link>
-        <Link href="/id" className="btn btn-secondary">
-          職員証
-        </Link>
-      </div>
-
-      <p className="mt-8 border-t border-line pt-3 text-[10px] leading-5 text-muted">
-        知る必要性の原則により、本端末に表示される情報は、あなたの職務に必要な範囲に制限されています。
+      <p className="mt-10 text-center font-doc text-xs tracking-[0.5em] text-muted">確保・収容・保護</p>
+      <p className="mt-2 text-center text-[10px] leading-5 text-muted">
+        知る必要性の原則により、本端末に表示される情報は職務に必要な範囲に制限されています。
       </p>
     </TerminalShell>
   );

@@ -1,6 +1,6 @@
 import { forwardRef, type ReactNode } from "react";
 import type { StoredReport } from "@/lib/report/schema.ts";
-import { AcsBar, ClassifiedStamp } from "./AcsBar.tsx";
+import { AcsBar, ApprovalBox, ClassifiedStamp } from "./AcsBar.tsx";
 import { CLEARANCE_LABEL, type Clearance } from "@/lib/client/session.ts";
 import { RichText } from "./RichText.tsx";
 
@@ -51,19 +51,29 @@ export const ReportDocument = forwardRef<HTMLElement, ReportDocumentProps>(funct
   const isO5 = clearance === "O5";
   return (
     <article ref={ref} className="relative bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">
-      {/* 文書の帯 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink pb-2 font-mono text-[11px] tracking-wider">
-        <span>SCP財団 記録・情報保安管理局</span>
-        <span>
-          閲覧権限: <span className={isO5 ? "font-bold text-[#a3241a]" : "font-bold"}>{CLEARANCE_LABEL[clearance]}</span>
-        </span>
+      {/* 文書の頭書き: 左に発行元と文書の情報、右に決裁欄(公文書の書式) */}
+      <div className="flex items-start justify-between gap-4 border-b-2 border-ink pb-3">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[10.5px] leading-5 text-ink/80">
+          <dt>発行</dt>
+          <dd>記録・情報保安管理局</dd>
+          <dt>文書</dt>
+          <dd>{itemNumber}</dd>
+          <dt>作成</dt>
+          <dd>{recordedAt.toLocaleDateString("ja-JP")}</dd>
+          <dt>閲覧</dt>
+          <dd className={isO5 ? "font-bold text-[#a3241a]" : "font-bold"}>{CLEARANCE_LABEL[clearance]}</dd>
+        </dl>
+        <ApprovalBox stamps={["観測", "記録", isO5 ? "評議" : null]} />
       </div>
 
-      <ClassifiedStamp />
-
-      <h2 className="mt-6 pr-20 text-xl font-bold leading-snug sm:text-2xl">
-        {itemNumber} - {report.title}
-      </h2>
+      <div className="relative">
+        <h2 className="mt-6 pr-16 text-xl font-bold leading-snug sm:text-2xl">
+          {itemNumber}
+          <br />
+          {report.title}
+        </h2>
+        <ClassifiedStamp />
+      </div>
 
       <AcsBar itemNumber={itemNumber} report={report} />
 

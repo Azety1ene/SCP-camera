@@ -1,19 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { M_PLUS_1_Code, Noto_Sans_JP } from "next/font/google";
+import { BIZ_UDPGothic, BIZ_UDPMincho, M_PLUS_1_Code } from "next/font/google";
 import "./globals.css";
 import { AudioUnlocker } from "@/components/SoundToggle.tsx";
 import { AmbientEffects } from "@/components/AmbientEffects.tsx";
 
-// 端末の文字(等幅)
-const terminalFont = M_PLUS_1_Code({
-  variable: "--font-terminal",
+/*
+ * 書体は「日本の官公庁の業務端末と公文書」を参照して決めている(docs/research/16-ai-slop.md)。
+ * - UI: 自治体の公文書で採用が広がっている UD ゴシック
+ * - 文書(報告書・書庫・メール): 公文書の明朝
+ * - 端末の表示(起動ログ・番号・時刻・カメラ): 等幅
+ */
+const uiFont = BIZ_UDPGothic({
+  variable: "--font-ui",
   weight: ["400", "700"],
   preload: false,
 });
 
-// 報告書の本文
-const documentFont = Noto_Sans_JP({
+const documentFont = BIZ_UDPMincho({
   variable: "--font-document",
+  weight: ["400", "700"],
+  preload: false,
+});
+
+const terminalFont = M_PLUS_1_Code({
+  variable: "--font-terminal",
   weight: ["400", "700"],
   preload: false,
 });
@@ -24,7 +34,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#07090a",
+  themeColor: "#0d1012",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -32,7 +42,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ja" className={`${terminalFont.variable} ${documentFont.variable} h-full antialiased`}>
+    <html lang="ja" className={`${uiFont.variable} ${documentFont.variable} ${terminalFont.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         {children}
         <AudioUnlocker />

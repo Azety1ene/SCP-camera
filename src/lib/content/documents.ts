@@ -14,6 +14,8 @@ export type ArchiveDocument = {
   required: Clearance;
   /** 設定されていれば、パスコードを入力するまで開けない(O5 は入力不要) */
   passcode?: string;
+  /** 決裁欄の印(起案・審査・承認)。null は未決裁 */
+  stamps: [string | null, string | null, string | null];
   summary: string;
   body: string;
 };
@@ -21,6 +23,7 @@ export type ArchiveDocument = {
 export const DOCUMENTS: ArchiveDocument[] = [
   {
     id: "terminal-manual",
+    stamps: ["形式", "記録", "部長"],
     title: "統合観測端末 取扱説明書(新任職員向け)",
     number: "文書番号 81-OBS-001 第3版",
     issuer: "観測記録部門 形式係",
@@ -68,6 +71,7 @@ A. 端末の返却手続きは、[[現在受け付けていません]]。
   },
   {
     id: "canteen-news",
+    stamps: ["食堂", "総務", null],
     title: "サイト-81██ 食堂だより 第██号",
     number: "掲示物 81-CAF-███",
     issuer: "サイト-81██ 食堂運営委員会",
@@ -101,6 +105,7 @@ A. 端末の返却手続きは、[[現在受け付けていません]]。
   },
   {
     id: "incident-cases",
+    stamps: ["安全", "記録", "部長"],
     title: "観測記録部門 事故事例集(第2集)",
     number: "文書番号 81-OBS-017",
     issuer: "観測記録部門 安全管理係",
@@ -140,6 +145,7 @@ A. 端末の返却手続きは、[[現在受け付けていません]]。
   },
   {
     id: "network-origin",
+    stamps: ["██", "██", "評議"],
     title: "統合観測ネットワーク 設置経緯書",
     number: "文書番号 81-OBS-000",
     issuer: "日本支部 ██局",

@@ -16,7 +16,7 @@ function formatDate(time: number) {
 
 function MailView({ mail, to, clearance, onBack }: { mail: InboxItem; to: string; clearance: Clearance; onBack: () => void }) {
   return (
-    <div className="glitch-in">
+    <div>
       <button type="button" onClick={onBack} className="btn btn-secondary mb-4">
         <BackIcon className="h-4 w-4" />
         受信箱に戻る
@@ -54,12 +54,12 @@ export function Inbox() {
   const to = `${profile.name || "職員"} <${profile.staffNo || "unassigned"}@site81.scp.int>`;
 
   return (
-    <TerminalShell staff={staff}>
+    <TerminalShell staff={staff} screen={{ id: "MSG-0500", name: "受信箱" }}>
       {open ? (
         <MailView mail={open} to={to} clearance={staff.clearance} onBack={() => setOpenId(null)} />
       ) : (
         <>
-          <h1 className="text-xl font-bold">受信箱</h1>
+          <h1 className="font-doc text-xl font-bold">受信箱</h1>
           <p className="mt-1 text-xs text-muted">所属部門・人事局からの通知が届きます。本端末のメールは、端末の外へ持ち出すことができません。</p>
           {inbox.length === 0 ? (
             <p className="mt-8 text-sm text-muted">メールはまだ届いていません。</p>
@@ -76,7 +76,7 @@ export function Inbox() {
                     }}
                     className="flex w-full items-start gap-3 py-3 text-left hover:bg-panel/60"
                   >
-                    <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${mail.read ? "bg-transparent" : "bg-accent"}`} />
+                    <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${mail.read ? "bg-transparent" : "bg-seal"}`} />
                     <span className="min-w-0 flex-1">
                       <span className="flex justify-between gap-3 text-[11px] text-muted">
                         <span className="truncate">{mail.from}</span>
@@ -87,7 +87,7 @@ export function Inbox() {
                           mail.important ? "font-bold" : ""
                         }`}
                       >
-                        {mail.important && <span className="mr-1 text-warn">[重要]</span>}
+                        {mail.important && <span className="mr-1 text-seal">[重要]</span>}
                         {mail.subject}
                       </span>
                     </span>
