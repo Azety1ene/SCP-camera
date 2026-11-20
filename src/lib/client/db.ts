@@ -23,6 +23,8 @@ export type ContainmentRecord = {
   error?: { code: string; message: string };
   /** 生成を始めた時刻。リロードで二重に生成しないために使う */
   requestedAt?: number;
+  /** 照会した回数。結果を受け取れなかったときの自動の再照会を、1回までにするために使う */
+  attempts?: number;
 };
 
 interface ScpDB extends DBSchema {

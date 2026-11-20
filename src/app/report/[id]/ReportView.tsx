@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { ReportDocument } from "@/components/report/ReportDocument.tsx";
 import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@/lib/client/db.ts";
@@ -26,8 +26,58 @@ const QUERY_STEPS = [
   "記録の一部に閲覧制限を適用中",
 ];
 
-/** React の開発モードで effect が2回走っても、同じ記録を二重に生成しないため */
+/** 同じ記録を二重に生成しないため(画面が描き直されても、照会は1件につき1回) */
 const inFlight = new Set<string>();
+
+/** 記録が更新されたことを、表示中の画面に知らせるイベント */
+const RECORD_EVENT = "scp-record-change";
+
+function announce(id: string) {
+  window.dispatchEvent(new CustomEvent(RECORD_EVENT, { detail: id }));
+}
+
+/**
+ * 照会(報告書の生成)。結果は IndexedDB に書き、イベントで知らせる。
+ * 画面のコンポーネントの外で動かすので、画面が作り直されても結果を取りこぼさない。
+ */
+async function runQuery(current: ContainmentRecord) {
+  if (inFlight.has(current.id)) return;
+  inFlight.add(current.id);
+  await updateRecord(current.id, {
+    status: "pending",
+    requestedAt: Date.now(),
+    attempts: (current.attempts ?? 0) + 1,
+    error: undefined,
+  });
+  announce(current.id);
+
+  let patch: Partial<ContainmentRecord>;
+  try {
+    const form = new FormData();
+    form.append("image", new File([current.photo], "capture.jpg", { type: "image/jpeg" }));
+    const res = await fetch("/api/generate", { method: "POST", body: form });
+    let body: GenerateResponse | null = null;
+    try {
+      body = (await res.json()) as GenerateResponse;
+    } catch {
+      body = null;
+    }
+    if (!body) {
+      patch = { status: "error", error: { code: `http_${res.status}`, message: "財団回線から不正な応答を受信しました。" } };
+    } else if ("error" in body) {
+      patch = { status: "error", error: body.error };
+    } else {
+      patch = { status: "done", itemNumber: body.itemNumber, tone: body.tone, report: body.report };
+    }
+  } catch {
+    patch = { status: "error", error: { code: "network", message: "財団回線との接続が切断されました。" } };
+  } finally {
+    inFlight.delete(current.id);
+  }
+  await updateRecord(current.id, patch);
+  announce(current.id);
+  play(patch.status === "done" ? "complete" : "deny");
+}
 
 type GenerateResponse =
   | { itemNumber: string; tone: string; report: GeneratedReport }
@@ -131,56 +181,39 @@ export function ReportView() {
   const [exporting, setExporting] = useState(false);
   const documentRef = useRef<HTMLElement>(null);
 
-  const generate = useCallback(async (current: ContainmentRecord) => {
-    if (inFlight.has(current.id)) return;
-    inFlight.add(current.id);
-    const started = await updateRecord(current.id, { status: "pending", requestedAt: Date.now(), error: undefined });
-    if (started) setRecord(started);
-
-    let patch: Partial<ContainmentRecord>;
-    try {
-      const form = new FormData();
-      form.append("image", new File([current.photo], "capture.jpg", { type: "image/jpeg" }));
-      const res = await fetch("/api/generate", { method: "POST", body: form });
-      const body = (await res.json()) as GenerateResponse;
-      patch =
-        "error" in body
-          ? { status: "error", error: body.error }
-          : { status: "done", itemNumber: body.itemNumber, tone: body.tone, report: body.report };
-    } catch {
-      patch = { status: "error", error: { code: "network", message: "財団回線との接続が切断されました。" } };
-    } finally {
-      inFlight.delete(current.id);
-    }
-    const next = await updateRecord(current.id, patch);
-    if (next) setRecord(next);
-    play(patch.status === "done" ? "complete" : "deny");
-  }, []);
-
-  // 記録を読み込み、未生成なら生成を始める
+  // 記録を読み込み、未生成なら照会を始める。照会の進み具合はイベントで受け取る
   useEffect(() => {
     if (!clearance) return;
     let cancelled = false;
-    getRecord(id).then((found) => {
+
+    const load = async (startIfNeeded: boolean) => {
+      const found = await getRecord(id);
       if (cancelled) return;
       setRecord(found ?? null);
-      if (!found || found.status !== "pending") return;
-      if (inFlight.has(found.id)) return;
-      if (found.requestedAt) {
-        // ページを開き直したなどで、前回の照会結果を受け取れなかった。
-        // 黙って再生成すると二重に課金されるので、再照会はユーザーに選ばせる
-        updateRecord(found.id, {
+      if (!startIfNeeded || !found || found.status !== "pending" || inFlight.has(found.id)) return;
+      if (found.requestedAt && (found.attempts ?? 1) >= 2) {
+        // 自動の再照会でも結果を受け取れなかった。これ以上は利用者に任せる
+        await updateRecord(found.id, {
           status: "error",
           error: { code: "interrupted", message: "照会が中断されました。再照会してください。" },
-        }).then((next) => next && !cancelled && setRecord(next));
+        });
+        if (!cancelled) setRecord((await getRecord(id)) ?? null);
         return;
       }
-      generate(found);
-    });
+      // 初回、またはページの読み込み直しなどで結果を受け取れなかったとき(1回だけ自動で再照会する)
+      runQuery(found);
+    };
+
+    const onChange = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === id) load(false);
+    };
+    window.addEventListener(RECORD_EVENT, onChange);
+    load(true);
     return () => {
       cancelled = true;
+      window.removeEventListener(RECORD_EVENT, onChange);
     };
-  }, [clearance, id, generate]);
+  }, [clearance, id]);
 
   // O5 で報告書を開いたら、黒塗りが剥がれ始めるのに合わせて音を鳴らす
   const isDone = record?.status === "done";
@@ -230,11 +263,12 @@ export function ReportView() {
         <div className="space-y-4 text-sm leading-7">
           <p className="text-danger">照会に失敗しました</p>
           <p className="text-muted">{record.error?.message}</p>
+          <p className="font-mono text-[10px] text-muted/70">エラーコード: {record.error?.code ?? "unknown"}</p>
           <div className="flex flex-wrap gap-3">
             {record.error?.code !== "unauthorized" && (
               <button
                 type="button"
-                onClick={() => generate(record)}
+                onClick={() => runQuery(record)}
                 className="border border-accent px-4 py-2 text-accent hover:bg-accent hover:text-background"
               >
                 再照会する

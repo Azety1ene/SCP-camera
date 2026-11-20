@@ -196,6 +196,10 @@ export function ScanCamera() {
     const id = newRecordId();
     await saveRecord({ id, createdAt: at.getTime(), status: "pending", photo, photoFiltered });
     router.push(`/report/${id}`);
+    // Next.js は離れた画面の状態を残し、戻ってきたときにそのまま使う。
+    // 「撮影中」のまま残るとシャッターが押せなくなるので、移動したら元に戻しておく
+    setCapturing(false);
+    setFlash(false);
   }
 
   async function onShutter() {
