@@ -47,8 +47,8 @@ export async function generateReport(
       systemInstruction: SYSTEM_INSTRUCTION,
       responseMimeType: "application/json",
       responseJsonSchema: reportJsonSchema,
-      // 既定は MEDIUM。HIGH(既定値)だと生成に5分以上かかり、関数の実行上限を超えることがあるため
-      thinkingConfig: { thinkingLevel: options.thinkingLevel ?? ThinkingLevel.MEDIUM },
+      // 既定は LOW。hydrogen で MEDIUM は約240秒、LOW は約20秒で、質の差は小さかった(関数の実行上限は300秒)
+      thinkingConfig: { thinkingLevel: options.thinkingLevel ?? ThinkingLevel.LOW },
     },
   });
 
