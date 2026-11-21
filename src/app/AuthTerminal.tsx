@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CLEARANCE_LABEL, fetchClearance, type ServerClearance as Clearance } from "@/lib/client/session.ts";
+import { CLEARANCE_LABEL, fetchClearance, type Clearance, type ServerClearance } from "@/lib/client/session.ts";
+import { resolveClearance } from "@/lib/client/progress.ts";
 import { play, unlockAudio } from "@/lib/client/sound.ts";
 import { SoundToggle } from "@/components/SoundToggle.tsx";
 
@@ -141,7 +142,8 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
     const pause = (ms: number) => (skipRef.current || cancelled ? Promise.resolve() : wait(ms));
 
     (async () => {
-      const clearancePromise = fetchClearance();
+      // 認証済みなら、撮影件数による昇格を反映したクリアランスを出す
+      const clearancePromise = fetchClearance().then((server) => (server ? resolveClearance(server) : null));
       await pause(300);
       for (const step of BOOT) {
         if (cancelled || skipRef.current) break;
@@ -215,15 +217,15 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
     setBusy(true);
     push({ text: `> 職員認証コード: ${"*".repeat(code.length)}`, tone: "muted" }, { text: "照合中 ...", tone: "muted" });
 
-    let clearance: Clearance | null = null;
+    let server: ServerClearance | null = null;
     try {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const body = (await res.json()) as { ok: boolean; clearance?: Clearance };
-      clearance = body.ok && body.clearance ? body.clearance : null;
+      const body = (await res.json()) as { ok: boolean; clearance?: ServerClearance };
+      server = body.ok && body.clearance ? body.clearance : null;
     } catch {
       push({ text: "通信エラー: 財団回線に接続できません。", tone: "danger" });
       setBusy(false);
@@ -231,6 +233,7 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
     }
 
     setCode("");
+    const clearance: Clearance | null = server ? await resolveClearance(server) : null;
     if (!clearance) {
       const failures = readFailures() + 1;
       writeFailures(failures);

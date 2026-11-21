@@ -39,6 +39,14 @@ export function effectiveClearance(server: ServerClearance, contained: number): 
   return server === "O5" ? "O5" : levelForCount(contained);
 }
 
+/** 端末内の収容記録を数えて、昇格を反映したクリアランスを返す(認証画面など、画面の外で使う) */
+export async function resolveClearance(server: ServerClearance): Promise<Clearance> {
+  const contained = await listRecords()
+    .then((records) => records.filter((record) => record.status === "done").length)
+    .catch(() => 0);
+  return effectiveClearance(server, contained);
+}
+
 /** 認証が必要な画面で使う。未認証なら認証端末へ戻す。判定が終わるまでは undefined */
 export function useStaff(): StaffState | undefined {
   const server = useRequireClearance();
