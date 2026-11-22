@@ -28,3 +28,18 @@ export async function photoBytes(id: string, stored: Blob): Promise<ArrayBuffer>
 export function forgetPhoto(id: string) {
   photos.delete(id);
 }
+
+/**
+ * 撮影直後の添付画像(監視カメラ風に加工したもの)。
+ * 保存した直後に IndexedDB から取り出した Blob は、スマホのブラウザで読めないことがあるので、
+ * 撮影した端末では、ページを読み込み直すまではこちらを表示と登録に使う。
+ */
+const filtered = new Map<string, Blob>();
+
+export function rememberFiltered(id: string, photo: Blob) {
+  filtered.set(id, photo);
+}
+
+export function freshFiltered(id: string): Blob | undefined {
+  return filtered.get(id);
+}

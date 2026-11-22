@@ -11,7 +11,7 @@ import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@
 import { useStaff } from "@/lib/client/progress.ts";
 import { useObjectUrl } from "@/lib/client/useObjectUrl.ts";
 import { play } from "@/lib/client/sound.ts";
-import { forgetPhoto, photoBytes } from "@/lib/client/upload-cache.ts";
+import { forgetPhoto, freshFiltered, photoBytes } from "@/lib/client/upload-cache.ts";
 import { setRating, useRatings } from "@/lib/client/store.ts";
 import type { GeneratedReport } from "@/lib/report/schema.ts";
 
@@ -223,7 +223,8 @@ function SharePanel({ record, onChange }: { record: ContainmentRecord; onChange:
     setBusy(true);
     setError("");
     try {
-      const { id, deleteKey } = await shareReport(record.shareToken!, record.photoFiltered, `81-OP-${terminalId.slice(-4)}`);
+      const photo = freshFiltered(record.id) ?? record.photoFiltered;
+      const { id, deleteKey } = await shareReport(record.shareToken!, photo, `81-OP-${terminalId.slice(-4)}`);
       await save({ sharedId: id, sharedDeleteKey: deleteKey, shareDeclined: false });
       setMode("idle");
       play("complete");
@@ -345,7 +346,9 @@ export function ReportView() {
   const clearance = staff?.clearance;
   const router = useRouter();
   const [record, setRecord] = useState<ContainmentRecord | null | undefined>(undefined);
-  const photoUrl = useObjectUrl(record?.photoFiltered);
+  // 撮影した直後は、保存先を経由しないメモリ上の画像を使う(upload-cache.ts を参照)
+  const photoBlob = record ? (freshFiltered(record.id) ?? record.photoFiltered) : undefined;
+  const photoUrl = useObjectUrl(photoBlob);
   const [exporting, setExporting] = useState(false);
   const documentRef = useRef<HTMLElement>(null);
 

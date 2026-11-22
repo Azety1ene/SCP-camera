@@ -201,10 +201,12 @@ export function ArchiveList() {
                 <Thumbnail blob={record.photoFiltered} alt={record.itemNumber ?? "記録画像"} />
                 <div className="space-y-0.5 p-2 text-[11px] leading-5">
                   <p className="flex items-center justify-between gap-1 text-foreground">
-                    <span>{record.itemNumber ?? "SCP-████-JP"}</span>
+                    <span className={record.itemNumber ? "" : "text-muted"}>{record.itemNumber ?? "番号未割当"}</span>
                     {record.sharedId && <span className="shrink-0 border border-accent/60 px-1 text-[10px] leading-4 text-accent">登録済</span>}
                   </p>
-                  <p className="truncate text-muted">{record.report?.title ?? STATUS_LABEL[record.status]}</p>
+                  <p className={`truncate ${record.status === "error" ? "text-danger" : record.status === "pending" ? "text-warn" : "text-muted"}`}>
+                    {record.report?.title ?? STATUS_LABEL[record.status]}
+                  </p>
                   <p className="text-muted">
                     {record.report?.objectClass ?? "—"} ／ {new Date(record.createdAt).toLocaleDateString("ja-JP")}
                   </p>
