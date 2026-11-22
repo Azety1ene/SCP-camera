@@ -4,7 +4,8 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { StoredReport } from "@/lib/report/schema.ts";
 
 /**
- * 収容記録(報告書)はブラウザの IndexedDB に保存する。サーバーには残さない。
+ * 収容記録(報告書)はブラウザの IndexedDB に保存する。
+ * 利用者が「財団データベースに登録する」を押したものだけ、サーバー(全職員で共有)にも送る。
  */
 
 export type RecordStatus = "pending" | "done" | "error";
@@ -25,6 +26,10 @@ export type ContainmentRecord = {
   requestedAt?: number;
   /** 照会した回数。結果を受け取れなかったときの自動の再照会を、1回までにするために使う */
   attempts?: number;
+  /** 照会時にサーバーが発行した登録票。財団データベースに登録するときに使う */
+  shareToken?: string;
+  /** 財団データベースに登録したときの ID */
+  sharedId?: string;
 };
 
 interface ScpDB extends DBSchema {

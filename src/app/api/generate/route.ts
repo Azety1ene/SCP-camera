@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { GeminiUnavailableError } from "@/lib/gemini.ts";
 import { generateReport, ReportFormatError } from "@/lib/report/generate.ts";
 import { pickSampleReport, isSampleMode } from "@/lib/report/samples.ts";
+import { signReport } from "@/lib/report/token.ts";
 import { decodeSession, SESSION_COOKIE } from "@/lib/session.ts";
 
 // 生成には数分かかることがあるため、上限を長めにとる(秒)
@@ -40,14 +41,17 @@ export async function POST(request: Request) {
   if (isSampleMode()) {
     await new Promise((resolve) => setTimeout(resolve, 6000 + Math.random() * 4000));
     const sample = pickSampleReport();
-    return Response.json({ itemNumber: sample.itemNumber, tone: sample.tone, report: sample.report });
+    const body = { itemNumber: sample.itemNumber, tone: sample.tone, report: sample.report };
+    return Response.json({ ...body, token: signReport(body) });
   }
 
   const data = Buffer.from(await image.arrayBuffer()).toString("base64");
 
   try {
     const result = await generateReport({ data, mimeType: image.type });
-    return Response.json({ itemNumber: result.itemNumber, tone: result.plan.toneName, report: result.report });
+    const body = { itemNumber: result.itemNumber, tone: result.plan.toneName, report: result.report };
+    // 財団データベースに登録するときの登録票
+    return Response.json({ ...body, token: signReport(body) });
   } catch (error) {
     if (error instanceof GeminiUnavailableError || (error instanceof ApiError && error.status === 503)) {
       return errorResponse(503, "busy", "財団回線が混雑しています。時間をおいて再試行してください。");

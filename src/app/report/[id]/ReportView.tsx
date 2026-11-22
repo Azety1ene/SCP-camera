@@ -4,7 +4,8 @@ import { exportImage } from "@/lib/client/exportImage.ts";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { TerminalShell } from "@/components/TerminalShell.tsx";
+import { TerminalShell, useTerminalId } from "@/components/TerminalShell.tsx";
+import { SharedError, shareReport } from "@/lib/client/shared.ts";
 import { ReportDocument } from "@/components/report/ReportDocument.tsx";
 import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@/lib/client/db.ts";
 import { useStaff } from "@/lib/client/progress.ts";
@@ -74,7 +75,7 @@ async function runQuery(current: ContainmentRecord) {
     } else if ("error" in body) {
       patch = { status: "error", error: body.error };
     } else {
-      patch = { status: "done", itemNumber: body.itemNumber, tone: body.tone, report: body.report };
+      patch = { status: "done", itemNumber: body.itemNumber, tone: body.tone, report: body.report, shareToken: body.token };
     }
   } catch (error) {
     // 原因を突き止められるよう、ブラウザが返した理由もエラーコードに含める
@@ -128,7 +129,7 @@ async function postWithRetry(bytes: ArrayBuffer): Promise<Response> {
 }
 
 type GenerateResponse =
-  | { itemNumber: string; tone: string; report: GeneratedReport }
+  | { itemNumber: string; tone: string; report: GeneratedReport; token?: string }
   | { error: { code: string; message: string } };
 
 function formatElapsed(ms: number) {
@@ -196,6 +197,68 @@ function RatingBox({ recordId }: { recordId: string }) {
       >
         –
       </button>
+    </div>
+  );
+}
+
+/** 財団データベース(全職員で共有)への登録 */
+function SharePanel({ record, onShared }: { record: ContainmentRecord; onShared: (id: string) => void }) {
+  const terminalId = useTerminalId();
+  const [state, setState] = useState<"idle" | "confirm" | "busy">("idle");
+  const [error, setError] = useState("");
+
+  if (record.sharedId) {
+    return (
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm">
+        <span className="text-accent">財団データベースに登録済み</span>
+        <Link href={`/database/${record.sharedId}`} className="btn btn-secondary">
+          登録した記録を開く
+        </Link>
+      </div>
+    );
+  }
+  if (!record.shareToken) {
+    return <p className="mt-6 border-t border-line pt-4 text-xs text-muted">この記録には登録票がないため、財団データベースに登録できません。</p>;
+  }
+
+  async function onShare() {
+    setState("busy");
+    setError("");
+    try {
+      const id = await shareReport(record.shareToken!, record.photoFiltered, `81-OP-${terminalId.slice(-4)}`);
+      await updateRecord(record.id, { sharedId: id });
+      play("complete");
+      onShared(id);
+    } catch (cause) {
+      setError(cause instanceof SharedError ? cause.message : "登録できませんでした。");
+      play("deny");
+      setState("idle");
+    }
+  }
+
+  return (
+    <div className="mt-6 border-t border-line pt-4 text-sm">
+      {state === "idle" && (
+        <button type="button" onClick={() => setState("confirm")} className="btn btn-secondary w-full sm:w-auto">
+          財団データベースに登録する
+        </button>
+      )}
+      {state !== "idle" && (
+        <div className="space-y-3">
+          <p className="text-xs leading-6 text-foreground">
+            登録すると、この報告書と添付画像が全職員に公開されます。人物の顔は編集済みの状態で公開されますが、写り込んだ物や場所はそのまま公開されます。登録しますか?
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={onShare} disabled={state === "busy"} className="btn btn-primary">
+              {state === "busy" ? "登録中 …" : "登録する"}
+            </button>
+            <button type="button" onClick={() => setState("idle")} disabled={state === "busy"} className="btn btn-secondary">
+              やめる
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
     </div>
   );
 }
@@ -321,6 +384,7 @@ export function ReportView() {
             recordedAt={new Date(record.createdAt)}
           />
           <RatingBox recordId={record.id} />
+          <SharePanel record={record} onShared={(sharedId) => setRecord({ ...record, sharedId })} />
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
             <button
               type="button"
