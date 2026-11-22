@@ -336,7 +336,7 @@ export function AuthTerminal() {
   }
 
   return (
-    <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 font-mono text-sm leading-7">
+    <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[calc(max(1rem,env(safe-area-inset-top))+3.5rem)] pb-10 font-mono text-sm leading-7">
       <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
       {returning && (!booted || outro) && (
         <p className="pointer-events-none fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-4 z-10 font-mono text-xs text-muted">
