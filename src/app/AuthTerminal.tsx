@@ -116,7 +116,7 @@ const TONE_CLASS: Record<NonNullable<Line["tone"]>, string> = {
   danger: "text-danger",
 };
 
-export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: string } }) {
+export function AuthTerminal() {
   const router = useRouter();
   /** 「端末を起動する」を押したか。音を鳴らすには、最初に画面に触れてもらう必要がある */
   const [powered, setPowered] = useState(false);
@@ -364,15 +364,6 @@ export function AuthTerminal({ codeHint }: { codeHint?: { level2: string; o5: st
         )}
         <div ref={endRef} />
       </div>
-
-      {/* TODO(仮): 確認用の合言葉メモ。あとで消す */}
-      {codeHint && (codeHint.level2 || codeHint.o5) && (
-        <aside className="mt-10 border border-dashed border-warn/60 px-3 py-2 text-xs leading-6 text-warn">
-          <p>[仮] 確認用の合言葉</p>
-          {codeHint.level2 && <p>レベル2: {codeHint.level2}</p>}
-          {codeHint.o5 && <p>O5: {codeHint.o5}</p>}
-        </aside>
-      )}
 
       <footer className="mt-10 text-xs text-muted">
         <Link href="/about" className="underline hover:text-foreground">
