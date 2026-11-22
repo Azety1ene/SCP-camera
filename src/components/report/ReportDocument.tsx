@@ -140,7 +140,7 @@ export const ReportDocument = forwardRef<HTMLElement, ReportDocumentProps>(funct
         </ol>
       )}
 
-      <p className="mt-8 font-mono text-[10px] leading-relaxed text-ink/60">
+      <p className="mt-8 font-mono text-[10px] leading-relaxed text-ink/75">
         記録日時 {recordedAt.toLocaleString("ja-JP")} ／ 本文書は統合観測端末により自動作成された。
         <br />
         SCP財団の世界観は CC BY-SA 3.0 で公開されている創作に基づく。

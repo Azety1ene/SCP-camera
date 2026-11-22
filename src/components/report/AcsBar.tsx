@@ -88,7 +88,7 @@ function Cell({ label, value, note, color, icon }: { label: string; value: strin
           <p className="truncate font-mono text-[13px] font-bold" style={{ color }}>
             {value}
           </p>
-          <p className="text-[10px] text-ink/60">{note}</p>
+          <p className="text-[10px] text-ink/75">{note}</p>
         </div>
       </div>
     </div>

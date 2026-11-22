@@ -15,9 +15,11 @@
   --raised: #1b2225;
   --line: #2f383b;
   --foreground: #e6e3da;
-  --muted: #8e968f;
+  --muted: #9aa29b;
   --accent: #6fae8c;
   --seal: #c8483a;
+  /* 暗い背景の上に朱で文字を置くとき用。--seal のままだとコントラスト比が AA(4.5:1)に届かない */
+  --seal-text: #dc6352;
   --warn: #c9a24a;
   --danger: #e06a5c;
   --paper: #e9e6dc;
@@ -35,6 +37,7 @@
   --color-muted: var(--muted);
   --color-accent: var(--accent);
   --color-seal: var(--seal);
+  --color-seal-text: var(--seal-text);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
   --color-paper: var(--paper);

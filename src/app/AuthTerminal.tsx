@@ -109,6 +109,25 @@ function writeFailures(value: number) {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** 起動シーケンスを最後まで見たことがあるか。2回目以降は「スキップ」ボタンを出す */
+const BOOT_SEEN_KEY = "scp-boot-seen";
+
+function readBootSeen(): boolean {
+  try {
+    return localStorage.getItem(BOOT_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeBootSeen() {
+  try {
+    localStorage.setItem(BOOT_SEEN_KEY, "1");
+  } catch {
+    // 保存できなくても、毎回フルで表示されるだけ
+  }
+}
+
 const TONE_CLASS: Record<NonNullable<Line["tone"]>, string> = {
   muted: "text-muted",
   accent: "text-accent glow",
@@ -130,6 +149,11 @@ export function AuthTerminal() {
   const endRef = useRef<HTMLDivElement>(null);
   /** 画面をタップするかキーを押すと、起動シーケンスを飛ばす */
   const skipRef = useRef(false);
+  /** 2回目以降の起動か。そのときだけ「スキップ」ボタンを出す */
+  const [returning] = useState(readBootSeen);
+  /** 認証後の演出を飛ばすか(2回目以降のみ) */
+  const skipOutroRef = useRef(false);
+  const [outro, setOutro] = useState(false);
 
   const push = (...next: Line[]) => setLines((prev) => [...prev, ...next]);
   const updateLast = (patch: (line: Line) => Partial<Line>) =>
@@ -182,6 +206,7 @@ export function AuthTerminal() {
       if (cancelled) return;
       setExisting(clearance);
       setBooted(true);
+      writeBootSeen();
     })();
 
     const skip = () => {
@@ -248,21 +273,23 @@ export function AuthTerminal() {
     }
 
     writeFailures(0);
+    setOutro(true);
+    const outroWait = (ms: number) => (skipOutroRef.current ? Promise.resolve() : wait(ms));
     push({ text: "認証完了。", tone: "accent" });
     play("granted");
     if (clearance === "O5") {
-      await wait(500);
+      await outroWait(500);
       push(
         { text: "警告: O5評議会権限を検出しました。", tone: "danger" },
         { text: "全記録の閲覧制限を解除します。", tone: "danger" },
       );
     } else {
-      await wait(400);
+      await outroWait(400);
       push({ text: `クリアランス ${CLEARANCE_LABEL[clearance]} を付与しました。`, tone: "accent" });
     }
-    await wait(700);
+    await outroWait(700);
     push({ text: "観測端末を起動します ...", tone: "muted" });
-    await wait(900);
+    await outroWait(900);
     router.push("/portal");
   }
 
@@ -293,6 +320,18 @@ export function AuthTerminal() {
   return (
     <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 font-mono text-sm leading-7">
       <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
+      {returning && (!booted || outro) && (
+        <button
+          type="button"
+          onClick={() => {
+            skipRef.current = true;
+            skipOutroRef.current = true;
+          }}
+          className="btn btn-secondary fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-4 z-10 font-mono text-xs"
+        >
+          スキップ ▸
+        </button>
+      )}
       <div className="flex-1 space-y-0.5">
         {lines.map((line, index) => (
           <p
@@ -348,7 +387,7 @@ export function AuthTerminal() {
                 value={code}
                 disabled={busy || lockedFor > 0}
                 onChange={(event) => setCode(event.target.value)}
-                className="w-full bg-transparent py-2 text-foreground outline-none placeholder:text-muted/50 disabled:opacity-50"
+                className="w-full bg-transparent py-2 text-foreground outline-none placeholder:text-muted disabled:opacity-50"
                 placeholder={lockedFor > 0 ? `端末ロック中 ... ${lockedFor}` : ""}
                 enterKeyHint="go"
               />

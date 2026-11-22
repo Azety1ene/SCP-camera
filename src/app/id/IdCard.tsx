@@ -7,6 +7,7 @@ import { CLEARANCE_LABEL } from "@/lib/client/session.ts";
 import { ensureProfile, updateProfile, useProfile } from "@/lib/client/store.ts";
 import { detectFaces, drawRedactions, loadFaceDetector, padBox } from "@/lib/client/faces.ts";
 import { play } from "@/lib/client/sound.ts";
+import { exportImage } from "@/lib/client/exportImage.ts";
 
 /** 職員番号から作る、それらしいバーコード(読み取れるものではない) */
 function Barcode({ value }: { value: string }) {
@@ -115,6 +116,7 @@ export function IdCard() {
   const [name, setName] = useState<string | null>(null);
   const [booth, setBooth] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const [exportState, setExportState] = useState<"idle" | "busy" | "shared" | "downloaded" | "error">("idle");
 
   useEffect(() => {
     ensureProfile();
@@ -134,13 +136,16 @@ export function IdCard() {
   }
 
   async function onExport() {
-    if (!cardRef.current) return;
-    const { toPng } = await import("html-to-image");
-    const url = await toPng(cardRef.current, { pixelRatio: 2 });
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `職員証_${profile.staffNo || "未発行"}.png`;
-    a.click();
+    if (!cardRef.current || exportState === "busy") return;
+    setExportState("busy");
+    try {
+      const result = await exportImage(cardRef.current, `職員証_${profile.staffNo || "未発行"}.png`);
+      setExportState(result === "cancelled" ? "idle" : result);
+      if (result !== "cancelled") play("ok");
+    } catch {
+      setExportState("error");
+      play("deny");
+    }
   }
 
   return (
@@ -161,31 +166,31 @@ export function IdCard() {
               // eslint-disable-next-line @next/next/no-img-element -- 端末内に保存した証明写真
               <img src={profile.photo} alt="証明写真" className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full items-center justify-center px-1 text-center font-mono text-[10px] text-ink/50">写真未登録</div>
+              <div className="flex h-full items-center justify-center px-1 text-center font-mono text-[10px] text-ink/75">写真未登録</div>
             )}
           </div>
           <dl className="min-w-0 flex-1 space-y-1 text-[11px] leading-tight">
             <div>
-              <dt className="font-mono text-[9px] text-ink/50">氏名</dt>
+              <dt className="font-mono text-[9px] text-ink/75">氏名</dt>
               <dd className="truncate text-base font-bold">{profile.name || "未登録"}</dd>
             </div>
             <div>
-              <dt className="font-mono text-[9px] text-ink/50">職員番号</dt>
+              <dt className="font-mono text-[9px] text-ink/75">職員番号</dt>
               <dd className="font-mono">{profile.staffNo || "発行中"}</dd>
             </div>
             <div>
-              <dt className="font-mono text-[9px] text-ink/50">所属</dt>
+              <dt className="font-mono text-[9px] text-ink/75">所属</dt>
               <dd>{staff.clearance === "O5" ? "O5評議会" : "観測記録部門"}</dd>
             </div>
             <div>
-              <dt className="font-mono text-[9px] text-ink/50">クリアランス</dt>
+              <dt className="font-mono text-[9px] text-ink/75">クリアランス</dt>
               <dd className={staff.clearance === "O5" ? "font-bold text-[#a3241a]" : "font-bold"}>{CLEARANCE_LABEL[staff.clearance]}</dd>
             </div>
           </dl>
         </div>
         <div className="border-t border-ink/15 px-4 pb-3 pt-2">
           <Barcode value={profile.staffNo || "81-0000-000"} />
-          <div className="mt-1 flex justify-between font-mono text-[9px] text-ink/60">
+          <div className="mt-1 flex justify-between font-mono text-[9px] text-ink/75">
             <span>発行 {issued ? issued.toLocaleDateString("ja-JP") : "—"}</span>
             <span>有効期限 {expires ? expires.toLocaleDateString("ja-JP") : "—"}</span>
           </div>
@@ -215,10 +220,15 @@ export function IdCard() {
         <button type="button" onClick={() => setBooth(true)} className="btn btn-secondary">
           証明写真を撮影
         </button>
-        <button type="button" onClick={onExport} className="btn btn-secondary">
-          画像で保存
+        <button type="button" onClick={onExport} disabled={exportState === "busy"} className="btn btn-secondary">
+          {exportState === "busy" ? "書き出し中 …" : "画像で保存"}
         </button>
       </div>
+      <p role="status" aria-live="polite" className="mx-auto mt-3 min-h-5 w-full max-w-sm text-xs">
+        {exportState === "downloaded" && <span className="text-accent">職員証の画像を書き出しました(ダウンロードフォルダに保存されます)。</span>}
+        {exportState === "shared" && <span className="text-accent">職員証の画像を書き出しました。</span>}
+        {exportState === "error" && <span className="text-danger">画像を作成できませんでした。もう一度お試しください。</span>}
+      </p>
     </TerminalShell>
   );
 }

@@ -84,9 +84,9 @@ function MailWatcher({ staff }: { staff: StaffState }) {
       role="status"
       className="fixed inset-x-4 top-[max(6.5rem,calc(env(safe-area-inset-top)+6rem))] z-50 mx-auto flex max-w-sm items-center gap-3 border border-foreground/40 bg-raised px-4 py-3 shadow-xl"
     >
-      <MailIcon className="h-5 w-5 shrink-0 text-seal" />
+      <MailIcon className="h-5 w-5 shrink-0 text-seal-text" />
       <span className="min-w-0">
-        <span className="block text-[11px] font-bold text-seal">新着メール</span>
+        <span className="block text-[11px] font-bold text-seal-text">新着メール</span>
         <span className="block truncate text-sm text-foreground">{notice}</span>
       </span>
     </Link>
@@ -125,10 +125,10 @@ function FunctionKeys({ unread }: { unread: number }) {
                   active ? "bg-foreground text-[#111416]" : "text-foreground hover:bg-raised"
                 }`}
               >
-                <span className={`font-mono text-[10px] ${active ? "text-[#111416]/60" : "text-muted"}`}>{key}</span>
+                <span className={`font-mono text-[10px] ${active ? "text-[#111416]/75" : "text-muted"}`}>{key}</span>
                 <span className="text-[11px] font-bold leading-none">
                   {label}
-                  {href === "/inbox" && unread > 0 && <span className={active ? "" : "text-seal"}>({unread})</span>}
+                  {href === "/inbox" && unread > 0 && <span className={active ? "" : "text-seal-text"}>({unread})</span>}
                 </span>
               </Link>
             </li>
@@ -218,7 +218,7 @@ export function TerminalShell({
             <span className="min-w-0 flex-1 truncate">
               端末 {terminalId}
               <span className="mx-1.5 text-line">|</span>
-              <span className={clearance === "O5" ? "text-seal" : "text-accent"}>{clearance ? CLEARANCE_LABEL[clearance] : "確認中"}</span>
+              <span className={clearance === "O5" ? "text-seal-text" : "text-accent"}>{clearance ? CLEARANCE_LABEL[clearance] : "確認中"}</span>
               <span className="mx-1.5 text-line">|</span>
               <span className="tabular-nums">{clock.slice(11, 16)}</span>
             </span>

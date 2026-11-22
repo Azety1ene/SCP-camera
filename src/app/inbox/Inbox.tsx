@@ -23,15 +23,15 @@ function MailView({ mail, to, clearance, onBack }: { mail: InboxItem; to: string
       </button>
       <article className="bg-paper font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)]">
         <dl className="grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-0.5 border-b border-ink/20 bg-ink/[0.05] px-5 py-3 font-mono text-[11px] leading-5">
-          <dt className="text-ink/60">差出人</dt>
+          <dt className="text-ink/75">差出人</dt>
           <dd className="break-all">
             {mail.from} &lt;{mail.address}&gt;
           </dd>
-          <dt className="text-ink/60">宛先</dt>
+          <dt className="text-ink/75">宛先</dt>
           <dd className="break-all">{to}</dd>
-          <dt className="text-ink/60">日時</dt>
+          <dt className="text-ink/75">日時</dt>
           <dd>{formatDate(mail.arrivedAt)}</dd>
-          <dt className="text-ink/60">件名</dt>
+          <dt className="text-ink/75">件名</dt>
           <dd className="font-bold">{mail.subject}</dd>
         </dl>
         <div className="px-5 pb-8 pt-5">
@@ -87,7 +87,7 @@ export function Inbox() {
                           mail.important ? "font-bold" : ""
                         }`}
                       >
-                        {mail.important && <span className="mr-1 text-seal">[重要]</span>}
+                        {mail.important && <span className="mr-1 text-seal-text">[重要]</span>}
                         {mail.subject}
                       </span>
                     </span>

@@ -31,7 +31,7 @@ export default function AboutPage() {
             SCP Foundation
           </a>
           および
-          <a href="http://scp-jp.wikidot.com/" className="underline hover:text-foreground" target="_blank" rel="noreferrer">
+          <a href="https://scp-jp.wikidot.com/" className="underline hover:text-foreground" target="_blank" rel="noreferrer">
             SCP財団 日本支部
           </a>
           の世界観に基づく二次創作です。これらのコンテンツは{" "}

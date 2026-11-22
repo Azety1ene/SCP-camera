@@ -7,7 +7,7 @@ import { nextPromotion, PROMOTIONS, useStaff, type StaffState } from "@/lib/clie
 import { CLEARANCE_LABEL } from "@/lib/client/session.ts";
 import { useInbox, useProfile } from "@/lib/client/store.ts";
 import { play } from "@/lib/client/sound.ts";
-import { newsForToday } from "@/lib/content/news.ts";
+import { newsForToday, type NewsItem } from "@/lib/content/news.ts";
 
 /** 帳票の一区画。箱で囲まず、上の太い罫線と見出しで区切る */
 function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
@@ -80,6 +80,35 @@ export function Portal() {
   const staff = useStaff();
   if (!staff) return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
   return <PortalBody staff={staff} />;
+}
+
+/** 内報の1件。見出しをタップすると、発信元と本文を開く */
+function NewsRow({ item }: { item: NewsItem }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="border-b border-dotted border-line">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => {
+          play("tap");
+          setOpen((v) => !v);
+        }}
+        className="flex min-h-11 w-full items-start gap-2 py-2.5 text-left text-[0.85rem] leading-6 hover:bg-raised"
+      >
+        <span aria-hidden className="mt-0.5 w-3 shrink-0 font-mono text-xs text-muted">
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="text-foreground/90">{item.headline}</span>
+      </button>
+      {open && (
+        <div className="pb-3 pl-5 font-doc text-[0.85rem] leading-7">
+          <p className="text-xs text-muted">発信: {item.from}</p>
+          <p className="mt-1 text-foreground/90">{item.body}</p>
+        </div>
+      )}
+    </li>
+  );
 }
 
 /** 認証の確認が済んでから描く(時刻はこの時点の端末の時計で決める) */
@@ -169,7 +198,7 @@ function PortalBody({ staff }: { staff: StaffState }) {
       {unread.length > 0 && (
         <Link href="/inbox" className="mt-6 flex items-center justify-between gap-3 border border-seal/60 px-4 py-3 text-sm hover:bg-seal/10">
           <span className="min-w-0">
-            <span className="mr-2 font-bold text-seal">未読 {unread.length} 件</span>
+            <span className="mr-2 font-bold text-seal-text">未読 {unread.length} 件</span>
             <span className="text-foreground">{unread[0].subject}</span>
           </span>
           <span className="shrink-0 text-muted">開く</span>
@@ -181,7 +210,7 @@ function PortalBody({ staff }: { staff: StaffState }) {
           <Row label="所属" value={staff.clearance === "O5" ? "O5評議会" : "サイト-81██ 観測記録部門"} />
           <Row
             label="クリアランス"
-            value={<span className={staff.clearance === "O5" ? "text-seal" : "text-accent"}>{CLEARANCE_LABEL[staff.clearance]}</span>}
+            value={<span className={staff.clearance === "O5" ? "text-seal-text" : "text-accent"}>{CLEARANCE_LABEL[staff.clearance]}</span>}
           />
           <Row label="着任日" value={profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString("ja-JP") : "—"} />
         </Section>
@@ -191,9 +220,7 @@ function PortalBody({ staff }: { staff: StaffState }) {
             {newsForToday(now)
               .slice(0, 4)
               .map((item) => (
-                <li key={item} className="ledger-row justify-start leading-6">
-                  <span className="text-foreground/90">{item}</span>
-                </li>
+                <NewsRow key={item.headline} item={item} />
               ))}
           </ul>
         </Section>

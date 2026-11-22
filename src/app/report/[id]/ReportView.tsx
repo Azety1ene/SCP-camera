@@ -1,5 +1,6 @@
 "use client";
 
+import { exportImage } from "@/lib/client/exportImage.ts";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -199,25 +200,6 @@ function RatingBox({ recordId }: { recordId: string }) {
   );
 }
 
-async function exportImage(node: HTMLElement, fileName: string) {
-  const { toBlob } = await import("html-to-image");
-  const blob = await toBlob(node, { pixelRatio: 2, backgroundColor: "#e9e6dc" });
-  if (!blob) throw new Error("画像を作成できませんでした");
-  const file = new File([blob], fileName, { type: "image/png" });
-  // スマホでは共有シート(写真に保存などができる)を出す。PCではそのままダウンロードする
-  const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
-  if (isTouchDevice && navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], title: fileName });
-    return;
-  }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 export function ReportView() {
   const { id } = useParams<{ id: string }>();
   const staff = useStaff();
@@ -274,7 +256,7 @@ export function ReportView() {
     if (!documentRef.current || !record?.itemNumber) return;
     setExporting(true);
     try {
-      await exportImage(documentRef.current, `${record.itemNumber}.png`);
+      await exportImage(documentRef.current, `${record.itemNumber}.png`, "#e9e6dc");
     } catch {
       // 共有を取り消したときなど。何もしない
     } finally {
@@ -310,7 +292,7 @@ export function ReportView() {
         <div className="space-y-4 text-sm leading-7">
           <p className="text-danger">照会に失敗しました</p>
           <p className="text-muted">{record.error?.message}</p>
-          <p className="font-mono text-[10px] text-muted/70">エラーコード: {record.error?.code ?? "unknown"}</p>
+          <p className="font-mono text-[10px] text-muted">エラーコード: {record.error?.code ?? "unknown"}</p>
           <div className="flex flex-wrap gap-3">
             {record.error?.code !== "unauthorized" && (
               <button
