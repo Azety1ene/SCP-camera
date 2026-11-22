@@ -59,5 +59,11 @@ export function useRequireClearance(): ServerClearance | undefined {
 }
 
 export async function logout(): Promise<void> {
+  // O5 の表示切り替えも解除する(progress.ts の OVERRIDE_KEY)
+  try {
+    localStorage.removeItem("scp-o5-view-as");
+  } catch {
+    // 無視してよい
+  }
   await fetch("/api/auth", { method: "DELETE" });
 }

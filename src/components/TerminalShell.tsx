@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { CLEARANCE_LABEL, logout } from "@/lib/client/session.ts";
-import type { StaffState } from "@/lib/client/progress.ts";
+import { CLEARANCE_LABEL, logout, type Clearance } from "@/lib/client/session.ts";
+import { setClearanceOverride, type StaffState } from "@/lib/client/progress.ts";
 import { cctvTimestamp } from "@/lib/client/cctv.ts";
 import { ensureProfile, syncMail, useInbox } from "@/lib/client/store.ts";
 import { play } from "@/lib/client/sound.ts";
@@ -139,8 +139,36 @@ function FunctionKeys({ unread }: { unread: number }) {
   );
 }
 
+/** O5 で認証したときだけ出す、表示するクリアランスの切り替え(開発・確認用) */
+function ClearanceSwitch({ current }: { current: Clearance }) {
+  const levels: Clearance[] = ["L2", "L3", "L4", "O5"];
+  return (
+    <div className="border-b border-line px-5 py-4">
+      <p className="text-xs font-bold">表示するクリアランス</p>
+      <p className="mt-1 text-[11px] leading-5 text-muted">O5権限の端末でのみ切り替えられます。認証はO5のままです。</p>
+      <div role="radiogroup" aria-label="表示するクリアランス" className="mt-3 grid grid-cols-4 border border-line font-mono text-xs">
+        {levels.map((level) => (
+          <button
+            key={level}
+            type="button"
+            role="radio"
+            aria-checked={current === level}
+            onClick={() => {
+              play("tap");
+              setClearanceOverride(level === "O5" ? null : level);
+            }}
+            className={`min-h-11 border-r border-line last:border-r-0 ${current === level ? "bg-foreground font-bold text-[#111416]" : "text-muted hover:text-foreground"}`}
+          >
+            {level === "O5" ? "O5" : `L${level.slice(1)}`}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** 右上のメニュー。タブに入らない画面と、退出 */
-function MenuSheet({ onClose, onLogout }: { onClose: () => void; onLogout: () => void }) {
+function MenuSheet({ staff, onClose, onLogout }: { staff?: StaffState; onClose: () => void; onLogout: () => void }) {
   const item = "flex min-h-14 w-full items-center gap-3 border-b border-line px-5 text-left text-sm hover:bg-raised";
   return (
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal aria-label="メニュー">
@@ -160,6 +188,7 @@ function MenuSheet({ onClose, onLogout }: { onClose: () => void; onLogout: () =>
           <DocIcon className="h-5 w-5 text-muted" />
           規約・ライセンス
         </Link>
+        {staff?.server === "O5" && <ClearanceSwitch current={staff.clearance} />}
         <button type="button" onClick={onLogout} className={`${item} text-danger`}>
           <ExitIcon className="h-5 w-5" />
           端末から退出する
@@ -219,6 +248,7 @@ export function TerminalShell({
               端末 {terminalId}
               <span className="mx-1.5 text-line">|</span>
               <span className={clearance === "O5" ? "text-seal-text" : "text-accent"}>{clearance ? CLEARANCE_LABEL[clearance] : "確認中"}</span>
+              {staff?.overridden && <span className="ml-1 text-seal-text">(O5で表示切替中)</span>}
               <span className="mx-1.5 text-line">|</span>
               <span className="tabular-nums">{clock.slice(11, 16)}</span>
             </span>
@@ -238,7 +268,7 @@ export function TerminalShell({
         </div>
       </header>
       {staff && <MailWatcher staff={staff} />}
-      {menuOpen && <MenuSheet onClose={() => setMenuOpen(false)} onLogout={onLogout} />}
+      {menuOpen && <MenuSheet staff={staff} onClose={() => setMenuOpen(false)} onLogout={onLogout} />}
       <div
         className={
           bare

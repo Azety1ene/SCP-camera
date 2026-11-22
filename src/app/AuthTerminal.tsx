@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CLEARANCE_LABEL, fetchClearance, type Clearance, type ServerClearance } from "@/lib/client/session.ts";
-import { resolveClearance } from "@/lib/client/progress.ts";
+import { resolveClearance, setClearanceOverride } from "@/lib/client/progress.ts";
 import { play, unlockAudio } from "@/lib/client/sound.ts";
 import { SoundToggle } from "@/components/SoundToggle.tsx";
 
@@ -276,6 +276,8 @@ export function AuthTerminal() {
     }
 
     setCode("");
+    // 認証し直したら、O5 の表示切り替えは解除する
+    if (server) setClearanceOverride(null);
     const clearance: Clearance | null = server ? await resolveClearance(server) : null;
     if (!clearance) {
       const failures = readFailures() + 1;

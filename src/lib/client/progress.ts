@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { listRecords } from "./db.ts";
 import { fetchClearance, useRequireClearance, type Clearance, type ServerClearance } from "./session.ts";
 
@@ -29,14 +29,63 @@ export function nextPromotion(count: number, clearance: Clearance): { level: Cle
 export type StaffState = {
   /** 合言葉で付与されたクリアランス */
   server: ServerClearance;
-  /** 画面で使うクリアランス(昇格を反映したもの) */
+  /** 画面で使うクリアランス(昇格や、O5 の表示切り替えを反映したもの) */
   clearance: Clearance;
   /** 収容済みの件数 */
   contained: number;
+  /** O5 が、メニューから別のクリアランスに表示を切り替えている */
+  overridden: boolean;
 };
 
-export function effectiveClearance(server: ServerClearance, contained: number): Clearance {
-  return server === "O5" ? "O5" : levelForCount(contained);
+/*
+ * O5 の表示切り替え(開発・確認用)。O5 で認証した端末だけ、メニューから好きなクリアランスで画面を見られる。
+ * サーバーの認証は O5 のままで、変わるのは画面の表示だけ。退出・認証し直しで解除する。
+ */
+const OVERRIDE_KEY = "scp-o5-view-as";
+const OVERRIDE_EVENT = "scp-o5-view-as-change";
+const OVERRIDE_LEVELS: Clearance[] = ["L2", "L3", "L4"];
+
+export function readClearanceOverride(): Clearance | null {
+  try {
+    const value = localStorage.getItem(OVERRIDE_KEY) as Clearance | null;
+    return value && OVERRIDE_LEVELS.includes(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** null で解除(O5 に戻す) */
+export function setClearanceOverride(value: Clearance | null) {
+  try {
+    if (value && value !== "O5") localStorage.setItem(OVERRIDE_KEY, value);
+    else localStorage.removeItem(OVERRIDE_KEY);
+  } catch {
+    // 保存できなければ切り替わらないだけ
+  }
+  window.dispatchEvent(new Event(OVERRIDE_EVENT));
+}
+
+function subscribeOverride(onChange: () => void) {
+  window.addEventListener(OVERRIDE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(OVERRIDE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function useClearanceOverride(): Clearance | null {
+  return useSyncExternalStore(subscribeOverride, readClearanceOverride, () => null);
+}
+
+export function effectiveClearance(server: ServerClearance, contained: number, override: Clearance | null = null): Clearance {
+  if (server === "O5") return override ?? "O5";
+  return levelForCount(contained);
+}
+
+function staffState(server: ServerClearance, contained: number, override: Clearance | null): StaffState {
+  const active = server === "O5" && override !== null;
+  return { server, clearance: effectiveClearance(server, contained, override), contained, overridden: active };
 }
 
 /** 端末内の収容記録を数えて、昇格を反映したクリアランスを返す(認証画面など、画面の外で使う) */
@@ -44,7 +93,7 @@ export async function resolveClearance(server: ServerClearance): Promise<Clearan
   const contained = await listRecords()
     .then((records) => records.filter((record) => record.status === "done").length)
     .catch(() => 0);
-  return effectiveClearance(server, contained);
+  return effectiveClearance(server, contained, readClearanceOverride());
 }
 
 /** 認証が必要な画面で使う。未認証なら認証端末へ戻す。判定が終わるまでは undefined */
@@ -66,10 +115,11 @@ export function useStaff(): StaffState | undefined {
     };
   }, [server]);
 
+  const override = useClearanceOverride();
   // 同じ内容なら同じオブジェクトを返す(受け取った側の effect が毎回走らないように)
   return useMemo(
-    () => (server && contained !== null ? { server, clearance: effectiveClearance(server, contained), contained } : undefined),
-    [server, contained],
+    () => (server && contained !== null ? staffState(server, contained, override) : undefined),
+    [server, contained, override],
   );
 }
 
@@ -119,9 +169,10 @@ export function useOptionalStaff(): StaffState | null | undefined {
     };
   }, []);
 
+  const override = useClearanceOverride();
   return useMemo(() => {
     if (server === undefined) return undefined;
     if (server === null || contained === null) return null;
-    return { server, clearance: effectiveClearance(server, contained), contained };
-  }, [server, contained]);
+    return staffState(server, contained, override);
+  }, [server, contained, override]);
 }
