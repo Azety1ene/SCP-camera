@@ -209,17 +209,35 @@ export function AuthTerminal() {
       writeBootSeen();
     })();
 
-    const skip = () => {
-      skipRef.current = true;
-    };
-    window.addEventListener("pointerdown", skip, { once: true });
-    window.addEventListener("keydown", skip, { once: true });
     return () => {
       cancelled = true;
-      window.removeEventListener("pointerdown", skip);
-      window.removeEventListener("keydown", skip);
     };
   }, [powered]);
+
+  // 2回目以降の起動だけ、画面を2回タップすると(PCでは Enter / Space / Esc でも)演出を飛ばす。
+  // 起動ログと、認証後の「観測端末を起動します …」までの待ち時間の両方に効く。初回は最後まで見せる
+  useEffect(() => {
+    if (!powered || !returning) return;
+    let lastTap = 0;
+    const skip = () => {
+      skipRef.current = true;
+      skipOutroRef.current = true;
+    };
+    const onPointer = () => {
+      const now = Date.now();
+      if (now - lastTap < 400) skip();
+      lastTap = now;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (["Enter", " ", "Escape"].includes(event.key) && (!booted || outro)) skip();
+    };
+    window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [powered, returning, booted, outro]);
 
   useEffect(() => {
     if (booted && !existing) inputRef.current?.focus();
@@ -321,16 +339,9 @@ export function AuthTerminal() {
     <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10 font-mono text-sm leading-7">
       <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
       {returning && (!booted || outro) && (
-        <button
-          type="button"
-          onClick={() => {
-            skipRef.current = true;
-            skipOutroRef.current = true;
-          }}
-          className="btn btn-secondary fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-4 z-10 font-mono text-xs"
-        >
-          スキップ ▸
-        </button>
+        <p className="pointer-events-none fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-4 z-10 font-mono text-xs text-muted">
+          画面を2回タップでスキップ
+        </p>
       )}
       <div className="flex-1 space-y-0.5">
         {lines.map((line, index) => (
