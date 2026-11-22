@@ -1,5 +1,6 @@
 import { del } from "@vercel/blob";
 import { cookies } from "next/headers";
+import { tokenHash } from "@/lib/report/token.ts";
 import { deleteShared, getShared } from "@/lib/server/shared.ts";
 import { decodeSession, SESSION_COOKIE } from "@/lib/session.ts";
 
@@ -23,16 +24,24 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/shared/[id]
   }
 }
 
-/** DELETE /api/shared/:id  O5 だけが削除できる */
-export async function DELETE(_request: Request, ctx: RouteContext<"/api/shared/[id]">) {
+/**
+ * DELETE /api/shared/:id
+ * 登録した端末は、登録時に受け取った鍵を x-delete-key ヘッダーに入れて取り下げられる。O5 は鍵なしで何でも削除できる
+ */
+export async function DELETE(request: Request, ctx: RouteContext<"/api/shared/[id]">) {
   const session = decodeSession((await cookies()).get(SESSION_COOKIE)?.value);
   if (!session) return errorResponse(401, "unauthorized", "職員認証が必要です。");
-  if (session.clearance !== "O5") return errorResponse(403, "forbidden", "この操作には O5 権限が必要です。");
+  const deleteKey = request.headers.get("x-delete-key");
+  if (session.clearance !== "O5" && !deleteKey) return errorResponse(403, "forbidden", "この操作には O5 権限が必要です。");
   const { id } = await ctx.params;
   if (!isId(id)) return errorResponse(404, "not_found", "該当する記録は存在しません。");
   try {
-    const imageUrl = await deleteShared(id);
-    if (!imageUrl) return errorResponse(404, "not_found", "該当する記録は存在しません。");
+    const imageUrl = await deleteShared(id, session.clearance === "O5" ? undefined : tokenHash(deleteKey!));
+    if (!imageUrl) {
+      return session.clearance === "O5"
+        ? errorResponse(404, "not_found", "該当する記録は存在しません。")
+        : errorResponse(403, "forbidden", "この記録を取り下げる権限がありません。");
+    }
     await del(imageUrl).catch((error) => console.error("[shared] blob delete failed:", error));
     return Response.json({ ok: true });
   } catch (error) {

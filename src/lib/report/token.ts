@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { GeneratedReport } from "@/lib/report/schema.ts";
 
 /**
@@ -39,7 +39,12 @@ export function verifyReport(token: string): SignedReport | null {
   }
 }
 
-/** 同じ報告書を二重に登録しないための指紋 */
+/** 登録した端末が後から取り下げるための鍵。端末にだけ渡し、DB にはハッシュを置く */
+export function newDeleteKey(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+/** 同じ報告書を二重に登録しないための指紋(取り下げ用の鍵のハッシュにも使う) */
 export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }

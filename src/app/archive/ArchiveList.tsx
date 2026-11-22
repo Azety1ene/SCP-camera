@@ -7,7 +7,7 @@ import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { deleteRecord, listRecords, type ContainmentRecord } from "@/lib/client/db.ts";
 import { useStaff } from "@/lib/client/progress.ts";
 import { useObjectUrl } from "@/lib/client/useObjectUrl.ts";
-import { fetchSharedList, SharedError, type SharedSummary } from "@/lib/client/shared.ts";
+import { deleteShared, fetchSharedList, SharedError, type SharedSummary } from "@/lib/client/shared.ts";
 import { play } from "@/lib/client/sound.ts";
 
 const STATUS_LABEL: Record<ContainmentRecord["status"], string> = {
@@ -62,6 +62,70 @@ function SharedList() {
   );
 }
 
+/**
+ * 端末の記録の抹消。画面内で確認する。
+ * 財団データベースに登録済みなら、「端末と財団データベースから」か「端末からのみ」を選ぶ
+ */
+function DeleteControl({ record, onDeleted }: { record: ContainmentRecord; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const shared = !!record.sharedId;
+  const canWithdraw = shared && !!record.sharedDeleteKey;
+
+  async function run(alsoShared: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      if (alsoShared) await deleteShared(record.sharedId!, record.sharedDeleteKey);
+      await deleteRecord(record.id);
+      play("deny");
+      onDeleted();
+    } catch (cause) {
+      setError(cause instanceof SharedError ? cause.message : "抹消できませんでした。");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex min-h-11 w-full items-center justify-center border-t border-line text-xs text-muted hover:bg-danger/10 hover:text-danger"
+      >
+        抹消
+      </button>
+    );
+  }
+
+  const option = "flex min-h-11 w-full items-center justify-center px-2 text-center text-xs leading-5 disabled:opacity-50";
+  return (
+    <div className="border-t border-line text-xs">
+      <p className="px-2 pt-2 leading-5 text-foreground">
+        {shared ? "抹消する範囲を選んでください。" : "この記録を端末から抹消します。取り消せません。"}
+      </p>
+      {canWithdraw && (
+        <button type="button" disabled={busy} onClick={() => run(true)} className={`${option} text-danger hover:bg-danger/10`}>
+          端末と財団データベースから抹消
+        </button>
+      )}
+      <button type="button" disabled={busy} onClick={() => run(false)} className={`${option} text-danger hover:bg-danger/10`}>
+        {shared ? "端末からのみ抹消" : "抹消する"}
+      </button>
+      {shared && !canWithdraw && <p className="px-2 leading-5 text-muted">財団データベースの記録は、この端末からは取り下げられません。</p>}
+      <button type="button" disabled={busy} onClick={() => setOpen(false)} className={`${option} border-t border-line text-muted hover:text-foreground`}>
+        やめる
+      </button>
+      {error && (
+        <p role="alert" className="px-2 pb-2 leading-5 text-danger">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 type Tab = "local" | "db";
 
 export function ArchiveList() {
@@ -84,12 +148,7 @@ export function ArchiveList() {
     router.replace(`${pathname}?tab=${next}`, { scroll: false });
   };
 
-  async function onDelete(record: ContainmentRecord) {
-    const label = record.itemNumber ?? "この記録";
-    if (!confirm(`${label} を記録から抹消しますか?この操作は取り消せません。`)) return;
-    await deleteRecord(record.id);
-    setRecords((prev) => prev?.filter((r) => r.id !== record.id) ?? null);
-  }
+  const removeFromList = (id: string) => setRecords((prev) => prev?.filter((r) => r.id !== id) ?? null);
 
   if (!clearance) return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
 
@@ -141,20 +200,17 @@ export function ArchiveList() {
               <Link href={`/report/${record.id}`} className="block hover:opacity-90">
                 <Thumbnail blob={record.photoFiltered} alt={record.itemNumber ?? "記録画像"} />
                 <div className="space-y-0.5 p-2 text-[11px] leading-5">
-                  <p className="text-foreground">{record.itemNumber ?? "SCP-████-JP"}</p>
+                  <p className="flex items-center justify-between gap-1 text-foreground">
+                    <span>{record.itemNumber ?? "SCP-████-JP"}</span>
+                    {record.sharedId && <span className="shrink-0 border border-accent/60 px-1 text-[10px] leading-4 text-accent">登録済</span>}
+                  </p>
                   <p className="truncate text-muted">{record.report?.title ?? STATUS_LABEL[record.status]}</p>
                   <p className="text-muted">
                     {record.report?.objectClass ?? "—"} ／ {new Date(record.createdAt).toLocaleDateString("ja-JP")}
                   </p>
                 </div>
               </Link>
-              <button
-                type="button"
-                onClick={() => onDelete(record)}
-                className="flex min-h-11 w-full items-center justify-center border-t border-line text-xs text-muted hover:bg-danger/10 hover:text-danger"
-              >
-                抹消
-              </button>
+              <DeleteControl record={record} onDeleted={() => removeFromList(record.id)} />
             </li>
           ))}
         </ul>

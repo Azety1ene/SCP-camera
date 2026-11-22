@@ -30,6 +30,10 @@ export type ContainmentRecord = {
   shareToken?: string;
   /** 財団データベースに登録したときの ID */
   sharedId?: string;
+  /** 財団データベースから取り下げるための鍵(登録した端末にだけある) */
+  sharedDeleteKey?: string;
+  /** 照会直後の「登録しますか?」で「この端末にのみ保存」を選んだ。後からでも登録できる */
+  shareDeclined?: boolean;
 };
 
 interface ScpDB extends DBSchema {

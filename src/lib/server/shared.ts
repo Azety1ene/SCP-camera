@@ -42,7 +42,10 @@ function ensureTable() {
       observatory text,
       token_hash text NOT NULL UNIQUE,
       created_at timestamptz NOT NULL DEFAULT now()
-    )`.catch((error) => {
+    )`
+    // 登録した端末が後から取り下げるための鍵(のハッシュ)
+    .then(() => sql()`ALTER TABLE shared_reports ADD COLUMN IF NOT EXISTS delete_key_hash text`)
+    .catch((error) => {
     ready = null;
     throw error;
   });
@@ -100,17 +103,31 @@ export async function insertShared(entry: {
   imageUrl: string;
   observatory: string | null;
   tokenHash: string;
+  deleteKeyHash: string;
 }): Promise<void> {
   await ensureTable();
   await sql()`
-    INSERT INTO shared_reports (id, item_number, tone, title, object_class, report, image_url, observatory, token_hash)
+    INSERT INTO shared_reports (id, item_number, tone, title, object_class, report, image_url, observatory, token_hash, delete_key_hash)
     VALUES (${entry.id}, ${entry.itemNumber}, ${entry.tone}, ${entry.report.title}, ${entry.report.objectClass},
-            ${JSON.stringify(entry.report)}::jsonb, ${entry.imageUrl}, ${entry.observatory}, ${entry.tokenHash})`;
+            ${JSON.stringify(entry.report)}::jsonb, ${entry.imageUrl}, ${entry.observatory}, ${entry.tokenHash}, ${entry.deleteKeyHash})`;
 }
 
-/** 削除した行の画像URLを返す(画像も消すため) */
-export async function deleteShared(id: string): Promise<string | null> {
+/** 同じ報告書がもう一度登録されたとき(登録票を持つ端末から)、取り下げ用の鍵を作り直す */
+export async function rotateDeleteKey(id: string, deleteKeyHash: string): Promise<void> {
   await ensureTable();
-  const rows = (await sql()`DELETE FROM shared_reports WHERE id = ${id} RETURNING image_url`) as { image_url: string }[];
+  await sql()`UPDATE shared_reports SET delete_key_hash = ${deleteKeyHash} WHERE id = ${id}`;
+}
+
+/**
+ * 削除した行の画像URLを返す(画像も消すため)。該当しなければ null。
+ * deleteKeyHash を渡したときは、その鍵で登録したものだけを消す(O5 は渡さずに何でも消せる)
+ */
+export async function deleteShared(id: string, deleteKeyHash?: string): Promise<string | null> {
+  await ensureTable();
+  const rows = (
+    deleteKeyHash
+      ? await sql()`DELETE FROM shared_reports WHERE id = ${id} AND delete_key_hash = ${deleteKeyHash} RETURNING image_url`
+      : await sql()`DELETE FROM shared_reports WHERE id = ${id} RETURNING image_url`
+  ) as { image_url: string }[];
   return rows[0]?.image_url ?? null;
 }

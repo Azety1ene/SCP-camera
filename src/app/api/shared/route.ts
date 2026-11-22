@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { put, del } from "@vercel/blob";
 import { cookies } from "next/headers";
 import { reportSchema } from "@/lib/report/schema.ts";
-import { tokenHash, verifyReport } from "@/lib/report/token.ts";
-import { findByTokenHash, insertShared, listShared } from "@/lib/server/shared.ts";
+import { newDeleteKey, tokenHash, verifyReport } from "@/lib/report/token.ts";
+import { findByTokenHash, insertShared, listShared, rotateDeleteKey } from "@/lib/server/shared.ts";
 import { decodeSession, SESSION_COOKIE } from "@/lib/session.ts";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -31,6 +31,7 @@ export async function GET() {
 /**
  * POST /api/shared  報告書を財団データベースに登録する。
  * multipart/form-data: token(照会時に受け取った登録票), image(添付画像。WebP か JPEG), observatory(観測所番号)
+ * 応答: { id, deleteKey }。deleteKey は登録した端末が後から取り下げるときに使う
  */
 export async function POST(request: Request) {
   if (!(await session())) return errorResponse(401, "unauthorized", "職員認証が必要です。");
@@ -54,9 +55,14 @@ export async function POST(request: Request) {
   const observatory = typeof observatoryRaw === "string" && /^81-OP-[0-9A-Za-z]{1,8}$/.test(observatoryRaw) ? observatoryRaw : null;
 
   const hash = tokenHash(token as string);
+  const deleteKey = newDeleteKey();
   try {
+    // 登録票を持っているのは照会した端末だけなので、二重登録のときは鍵を作り直して渡す
     const existing = await findByTokenHash(hash);
-    if (existing) return Response.json({ id: existing, duplicate: true });
+    if (existing) {
+      await rotateDeleteKey(existing, tokenHash(deleteKey));
+      return Response.json({ id: existing, deleteKey, duplicate: true });
+    }
 
     const id = randomUUID();
     // 写真は一度保存したら変わらないので、長くキャッシュさせる(Blob の読み出し回数を抑える)
@@ -67,12 +73,21 @@ export async function POST(request: Request) {
       cacheControlMaxAge: 60 * 60 * 24 * 365,
     });
     try {
-      await insertShared({ id, itemNumber: signed.itemNumber, tone: signed.tone, report: signed.report, imageUrl: blob.url, observatory, tokenHash: hash });
+      await insertShared({
+        id,
+        itemNumber: signed.itemNumber,
+        tone: signed.tone,
+        report: signed.report,
+        imageUrl: blob.url,
+        observatory,
+        tokenHash: hash,
+        deleteKeyHash: tokenHash(deleteKey),
+      });
     } catch (error) {
       await del(blob.url).catch(() => {});
       throw error;
     }
-    return Response.json({ id });
+    return Response.json({ id, deleteKey });
   } catch (error) {
     console.error("[shared] insert failed:", error);
     return errorResponse(503, "db", "財団データベースに接続できません。");

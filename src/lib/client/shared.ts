@@ -49,8 +49,24 @@ export async function fetchShared(id: string): Promise<SharedReport> {
   return (await call<{ item: SharedReport }>(`/api/shared/${encodeURIComponent(id)}`, { cache: "no-store" })).item;
 }
 
-export async function deleteShared(id: string): Promise<void> {
-  await call(`/api/shared/${encodeURIComponent(id)}`, { method: "DELETE" });
+/** O5 の削除、または登録した端末の取り下げ(deleteKey を渡す)。すでに無くなっていた場合も成功として扱う */
+export async function deleteShared(id: string, deleteKey?: string): Promise<void> {
+  try {
+    await call(`/api/shared/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: deleteKey ? { "x-delete-key": deleteKey } : undefined,
+    });
+  } catch (error) {
+    if (error instanceof SharedError && (error.code === "not_found" || error.code === "forbidden")) {
+      // 権限がないのか、すでに抹消されていたのかを確かめる
+      const gone = await fetchShared(id).then(
+        () => false,
+        (cause) => cause instanceof SharedError && cause.code === "not_found",
+      );
+      if (gone) return;
+    }
+    throw error;
+  }
 }
 
 /** 長い辺を1280pxまでに縮め、WebP にする。ブラウザが WebP に変換できなければ JPEG にする */
@@ -72,12 +88,13 @@ export async function toShareImage(source: Blob): Promise<Blob> {
   return jpeg;
 }
 
-/** 報告書を財団データベースに登録し、登録した ID を返す */
-export async function shareReport(token: string, photo: Blob, observatory: string): Promise<string> {
+/** 報告書を財団データベースに登録し、登録した ID と取り下げ用の鍵を返す */
+export async function shareReport(token: string, photo: Blob, observatory: string): Promise<{ id: string; deleteKey: string }> {
   const image = await toShareImage(photo);
   const form = new FormData();
   form.append("token", token);
   form.append("image", image, image.type === "image/webp" ? "attachment.webp" : "attachment.jpg");
   form.append("observatory", observatory);
-  return (await call<{ id: string }>("/api/shared", { method: "POST", body: form })).id;
+  const { id, deleteKey } = await call<{ id: string; deleteKey: string }>("/api/shared", { method: "POST", body: form });
+  return { id, deleteKey };
 }

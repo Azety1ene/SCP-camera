@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TerminalShell, useTerminalId } from "@/components/TerminalShell.tsx";
-import { SharedError, shareReport } from "@/lib/client/shared.ts";
+import { deleteShared, SharedError, shareReport } from "@/lib/client/shared.ts";
 import { ReportDocument } from "@/components/report/ReportDocument.tsx";
 import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@/lib/client/db.ts";
 import { useStaff } from "@/lib/client/progress.ts";
@@ -201,64 +201,140 @@ function RatingBox({ recordId }: { recordId: string }) {
   );
 }
 
-/** 財団データベース(全職員で共有)への登録 */
-function SharePanel({ record, onShared }: { record: ContainmentRecord; onShared: (id: string) => void }) {
+const PUBLIC_NOTICE =
+  "登録すると、この報告書と添付画像が全職員に公開されます。人物の顔は編集済みの状態で公開されますが、写り込んだ物や場所はそのまま公開されます。";
+
+/**
+ * 財団データベース(全職員で共有)への登録と取り下げ。
+ * 照会の直後は「登録する / この端末にのみ保存」を選んでもらう。端末にのみ保存しても、後から登録できる
+ */
+function SharePanel({ record, onChange }: { record: ContainmentRecord; onChange: (patch: Partial<ContainmentRecord>) => void }) {
   const terminalId = useTerminalId();
-  const [state, setState] = useState<"idle" | "confirm" | "busy">("idle");
+  const [mode, setMode] = useState<"idle" | "ask" | "withdraw">("idle");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  if (record.sharedId) {
-    return (
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm">
-        <span className="text-accent">財団データベースに登録済み</span>
-        <Link href={`/database/${record.sharedId}`} className="btn btn-secondary">
-          登録した記録を開く
-        </Link>
-      </div>
-    );
-  }
-  if (!record.shareToken) {
-    return <p className="mt-6 border-t border-line pt-4 text-xs text-muted">この記録には登録票がないため、財団データベースに登録できません。</p>;
-  }
+  const save = async (patch: Partial<ContainmentRecord>) => {
+    await updateRecord(record.id, patch);
+    onChange(patch);
+  };
 
   async function onShare() {
-    setState("busy");
+    setBusy(true);
     setError("");
     try {
-      const id = await shareReport(record.shareToken!, record.photoFiltered, `81-OP-${terminalId.slice(-4)}`);
-      await updateRecord(record.id, { sharedId: id });
+      const { id, deleteKey } = await shareReport(record.shareToken!, record.photoFiltered, `81-OP-${terminalId.slice(-4)}`);
+      await save({ sharedId: id, sharedDeleteKey: deleteKey, shareDeclined: false });
+      setMode("idle");
       play("complete");
-      onShared(id);
     } catch (cause) {
       setError(cause instanceof SharedError ? cause.message : "登録できませんでした。");
       play("deny");
-      setState("idle");
+    } finally {
+      setBusy(false);
     }
   }
 
-  return (
-    <div className="mt-6 border-t border-line pt-4 text-sm">
-      {state === "idle" && (
-        <button type="button" onClick={() => setState("confirm")} className="btn btn-secondary w-full sm:w-auto">
-          財団データベースに登録する
-        </button>
-      )}
-      {state !== "idle" && (
-        <div className="space-y-3">
-          <p className="text-xs leading-6 text-foreground">
-            登録すると、この報告書と添付画像が全職員に公開されます。人物の顔は編集済みの状態で公開されますが、写り込んだ物や場所はそのまま公開されます。登録しますか?
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <button type="button" onClick={onShare} disabled={state === "busy"} className="btn btn-primary">
-              {state === "busy" ? "登録中 …" : "登録する"}
-            </button>
-            <button type="button" onClick={() => setState("idle")} disabled={state === "busy"} className="btn btn-secondary">
+  async function onWithdraw() {
+    setBusy(true);
+    setError("");
+    try {
+      await deleteShared(record.sharedId!, record.sharedDeleteKey);
+      await save({ sharedId: undefined, sharedDeleteKey: undefined, shareDeclined: true });
+      setMode("idle");
+      play("tap");
+    } catch (cause) {
+      setError(cause instanceof SharedError ? cause.message : "取り下げられませんでした。");
+      play("deny");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const errorLine = error && (
+    <p role="alert" className="mt-2 text-xs text-danger">
+      {error}
+    </p>
+  );
+
+  if (!record.shareToken && !record.sharedId) {
+    return <p className="mt-6 border-t border-line pt-4 text-xs text-muted">この記録には登録票がないため、財団データベースに登録できません。</p>;
+  }
+
+  // 登録済み: 開く・取り下げる
+  if (record.sharedId) {
+    return (
+      <div className="mt-6 border-t border-line pt-4 text-sm">
+        <p className="text-accent">財団データベースに登録済み</p>
+        {mode === "withdraw" ? (
+          <div className="mt-3 space-y-3">
+            <p className="text-xs leading-6">財団データベースから取り下げます。全職員が閲覧できなくなります。この端末の記録は残り、後からもう一度登録できます。</p>
+            <div className="flex flex-wrap gap-3">
+              <button type="button" onClick={onWithdraw} disabled={busy} className="btn btn-danger">
+                {busy ? "取り下げ中 …" : "取り下げる"}
+              </button>
+              <button type="button" onClick={() => setMode("idle")} disabled={busy} className="btn btn-secondary">
+                やめる
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link href={`/database/${record.sharedId}`} className="btn btn-secondary">
+              登録した記録を開く
+            </Link>
+            {record.sharedDeleteKey && (
+              <button type="button" onClick={() => setMode("withdraw")} className="btn btn-secondary">
+                財団データベースから取り下げる
+              </button>
+            )}
+          </div>
+        )}
+        {errorLine}
+      </div>
+    );
+  }
+
+  // 照会の直後(まだ選んでいない)か、「登録する」を押したとき: 登録するかどうかを選ぶ
+  if (!record.shareDeclined || mode === "ask") {
+    return (
+      <div className="mt-6 border border-line bg-panel p-4 text-sm">
+        <p className="font-bold">この報告書を財団データベースに登録しますか?</p>
+        <p className="mt-2 text-xs leading-6 text-muted">{PUBLIC_NOTICE}</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button type="button" onClick={onShare} disabled={busy} className="btn btn-primary">
+            {busy ? "登録中 …" : "登録する"}
+          </button>
+          {record.shareDeclined ? (
+            <button type="button" onClick={() => setMode("idle")} disabled={busy} className="btn btn-secondary">
               やめる
             </button>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                play("tap");
+                save({ shareDeclined: true });
+              }}
+              disabled={busy}
+              className="btn btn-secondary"
+            >
+              この端末にのみ保存
+            </button>
+          )}
         </div>
-      )}
-      {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
+        {errorLine}
+      </div>
+    );
+  }
+
+  // 端末にのみ保存した記録: 後から登録できる
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm">
+      <span className="text-xs text-muted">この記録は、この端末にのみ保存されています。</span>
+      <button type="button" onClick={() => setMode("ask")} className="btn btn-secondary">
+        財団データベースに登録する
+      </button>
     </div>
   );
 }
@@ -384,7 +460,7 @@ export function ReportView() {
             recordedAt={new Date(record.createdAt)}
           />
           <RatingBox recordId={record.id} />
-          <SharePanel record={record} onShared={(sharedId) => setRecord({ ...record, sharedId })} />
+          <SharePanel record={record} onChange={(patch) => setRecord({ ...record, ...patch })} />
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
             <button
               type="button"

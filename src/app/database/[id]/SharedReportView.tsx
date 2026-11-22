@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { ReportDocument } from "@/components/report/ReportDocument.tsx";
+import { listRecords, updateRecord, type ContainmentRecord } from "@/lib/client/db.ts";
 import { useStaff } from "@/lib/client/progress.ts";
 import { deleteShared, fetchShared, SharedError, type SharedReport } from "@/lib/client/shared.ts";
 import { exportImage } from "@/lib/client/exportImage.ts";
@@ -19,6 +20,8 @@ export function SharedReportView() {
   const [item, setItem] = useState<SharedReport | null | undefined>(undefined);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<"" | "export" | "confirm-delete" | "delete">("");
+  /** この端末から登録した記録(あれば、取り下げられる) */
+  const [own, setOwn] = useState<ContainmentRecord | null>(null);
   const documentRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -31,6 +34,9 @@ export function SharedReportView() {
         if (cause instanceof SharedError && cause.code === "not_found") setItem(null);
         else setError(cause instanceof SharedError ? cause.message : "財団データベースに接続できません。");
       });
+    listRecords().then((records) => {
+      if (!cancelled) setOwn(records.find((r) => r.sharedId === id && r.sharedDeleteKey) ?? null);
+    });
     return () => {
       cancelled = true;
     };
@@ -59,7 +65,9 @@ export function SharedReportView() {
   async function onDelete() {
     setBusy("delete");
     try {
-      await deleteShared(id);
+      // 自分の端末から登録したものは鍵で取り下げる。O5 は鍵なしで抹消できる
+      await deleteShared(id, own?.sharedDeleteKey);
+      if (own) await updateRecord(own.id, { sharedId: undefined, sharedDeleteKey: undefined, shareDeclined: true });
       play("deny");
       router.replace("/archive?tab=db");
     } catch (cause) {
@@ -106,15 +114,18 @@ export function SharedReportView() {
             </button>
           </div>
 
-          {/* O5 だけが抹消できる */}
-          {clearance === "O5" && (
+          {/* O5 は何でも抹消できる。登録した端末は取り下げられる */}
+          {(clearance === "O5" || own) && (
             <div className="mt-8 border-t border-line pt-4 text-sm">
               {busy === "confirm-delete" || busy === "delete" ? (
                 <div className="space-y-3">
-                  <p className="text-xs leading-6">この記録を財団データベースから抹消します。全職員の端末から閲覧できなくなります。</p>
+                  <p className="text-xs leading-6">
+                    この記録を財団データベースから{own ? "取り下げます" : "抹消します"}。全職員の端末から閲覧できなくなります。
+                    {own && "この端末の記録は残ります。"}
+                  </p>
                   <div className="flex flex-wrap gap-3">
                     <button type="button" onClick={onDelete} disabled={busy === "delete"} className="btn btn-danger">
-                      {busy === "delete" ? "抹消中 …" : "抹消する"}
+                      {busy === "delete" ? "処理中 …" : own ? "取り下げる" : "抹消する"}
                     </button>
                     <button type="button" onClick={() => setBusy("")} disabled={busy === "delete"} className="btn btn-secondary">
                       やめる
@@ -123,7 +134,7 @@ export function SharedReportView() {
                 </div>
               ) : (
                 <button type="button" onClick={() => setBusy("confirm-delete")} className="btn btn-secondary text-danger">
-                  O5権限で抹消する
+                  {own ? "財団データベースから取り下げる" : "O5権限で抹消する"}
                 </button>
               )}
               {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
