@@ -1,30 +1,37 @@
 @import "tailwindcss";
 
 /*
- * 財団の業務システムのカラートークン。参照先は「日本の官公庁の業務端末と公文書」。
- * 色は意味で割り当てる(docs/research/16-ai-slop.md)。
- * - accent(青緑): 正常・閲覧可・承認済み。それ以外の飾りには使わない
- * - seal(朱): 印鑑の朱肉。機密・印・重要な通知
- * - warn(黄土): 注意
- * - danger: 拒否・エラー
- * 暗い画面が基本で、ライトモードは用意しない(端末の設定)。
+ * SCP財団 日本支部 統合観測端末(型式 81-OT)のカラートークン。
+ * 参照先: 1990〜2000年代の日本の官公庁・研究機関の専用業務端末と、印刷された公文書。
+ *
+ * - 地は無彩色の墨・鉄グレー系に統一し、青みがかった現代ダークUIやネオン発光を避ける
+ * - 色は意味だけに割り当てる(装飾目的で使わない)
+ *   - accent(計器オリーブ): 正常・接続・閲覧可
+ *   - seal(朱肉): 機密・印鑑・重要通達・O5
+ *   - warn(黄土): 注意・施錠・当直
+ *   - danger(朱赤): 拒否・エラー・抹消
+ * - 公文書(報告書・書庫)は端末画面の中に開く「紙の資料(--paper / --ink)」として明確に区別する
  */
 :root {
-  --background: #0d1012;
-  --panel: #14191b;
-  --raised: #1b2225;
-  --line: #2f383b;
-  --foreground: #e6e3da;
-  --muted: #9aa29b;
-  --accent: #6fae8c;
-  --seal: #c8483a;
-  /* 暗い背景の上に朱で文字を置くとき用。--seal のままだとコントラスト比が AA(4.5:1)に届かない */
-  --seal-text: #dc6352;
-  --warn: #c9a24a;
-  --danger: #e06a5c;
-  --paper: #e9e6dc;
-  --ink: #1b1d1c;
-  --redact: #050505;
+  --background: #121210;
+  --panel: #1a1917;
+  --raised: #242320;
+  --sunken: #0b0b0a;
+  --line: #36342f;
+  --line-strong: #58554c;
+  --foreground: #e5e1d6;
+  --muted: #969184;
+  --accent: #7e9b76;
+  --seal: #b53429;
+  /* 暗い背景の上で文字として読むときの朱(AA コントラスト確保) */
+  --seal-text: #df6456;
+  --warn: #c79a3b;
+  --danger: #df6456;
+  --paper: #ece8dc;
+  --paper-edge: #d8d2c2;
+  --ink: #191917;
+  --redact: #080807;
+  --reveal-ink: var(--ink);
   color-scheme: dark;
 }
 
@@ -32,7 +39,9 @@
   --color-background: var(--background);
   --color-panel: var(--panel);
   --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
@@ -41,6 +50,7 @@
   --color-warn: var(--warn);
   --color-danger: var(--danger);
   --color-paper: var(--paper);
+  --color-paper-edge: var(--paper-edge);
   --color-ink: var(--ink);
   --color-redact: var(--redact);
   --font-mono: var(--font-terminal), ui-monospace, monospace;
@@ -54,45 +64,21 @@ body {
   color: var(--foreground);
 }
 
-/* UI は UD ゴシック。文書は明朝(font-doc)、端末の表示は等幅(font-mono)を個別に指定する */
+/* UI は UD ゴシック。公文書は明朝(font-doc)、端末出力・管理番号・時刻は等幅(font-mono) */
 body {
   font-family: var(--font-ui), "Hiragino Sans", sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
-  background: var(--accent);
+  background: var(--foreground);
   color: var(--background);
 }
 
-/* ---- CRT の走査線・ちらつき ---- */
-.crt-overlay {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background:
-    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.07) 3px),
-    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 65%, rgba(0, 0, 0, 0.3) 100%);
-  animation: crt-flicker 6s infinite steps(1);
-}
-
-@keyframes crt-flicker {
-  0%, 96%, 100% { opacity: 1; }
-  97% { opacity: 0.85; }
-  98% { opacity: 1; }
-  99% { opacity: 0.9; }
-}
-
-/* 文字のにじみ(端末の発光)。起動ログなど、ごく一部だけに使う */
-.glow {
-  text-shadow: 0 0 4px rgba(116, 192, 143, 0.25);
-}
-
-/* ボタンは components の層に置く(個別の指定 h-14 や text-xs などで上書きできるように) */
+/* ボタン・入力欄・帳票は components 層に置く(個別のクラスで上書きできるように) */
 @layer components {
-  /* ---- ボタン ----
-   * 業務端末の操作ボタン。角を立て、押せる範囲は塗りか枠で示す。高さは指で押しやすい 44px 以上 */
+  /* ---- 操作スイッチ ----
+   * 業務端末の物理キーに倣い、角は立て、押下時に沈む硬い質感にする。高さは 44px 以上 */
   .btn {
     display: inline-flex;
     min-height: 2.75rem;
@@ -100,11 +86,12 @@ body {
     justify-content: center;
     gap: 0.5rem;
     border: 1px solid transparent;
-    border-radius: 2px;
+    border-radius: 0;
     padding: 0 1.1rem;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     font-weight: 700;
-    transition: background-color 0.12s, border-color 0.12s;
+    letter-spacing: 0.02em;
+    transition: background-color 0.08s, border-color 0.08s;
     user-select: none;
   }
 
@@ -122,71 +109,126 @@ body {
     opacity: 0.4;
   }
 
-  /* 主要な操作: 紙の白で塗る(色は意味に使うので、操作には使わない) */
+  /* 実行・確定: 生成り白の反転キー */
   .btn-primary {
     background: var(--foreground);
-    color: #111416;
-    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+    border-color: var(--foreground);
+    color: #121210;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #ffffff;
+    background: #f2efe6;
   }
 
-  /* それ以外の操作: 枠で範囲を示す */
+  /* 補助操作: 鉄グレーの枠付きキー */
   .btn-secondary {
     background: var(--raised);
-    border-color: #48535a;
+    border-color: var(--line-strong);
     color: var(--foreground);
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35);
   }
 
   .btn-secondary:hover:not(:disabled) {
-    background: #232b2f;
+    background: #2d2b27;
+    border-color: #706c62;
   }
 
-  /* 取り消せない操作 */
+  /* 取り消せない操作(抹消・取り下げ) */
   .btn-danger {
-    background: transparent;
-    border-color: rgba(224, 106, 92, 0.6);
+    background: #231413;
+    border-color: rgba(223, 100, 86, 0.7);
     color: var(--danger);
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35);
   }
 
   .btn-danger:hover:not(:disabled) {
-    background: rgba(224, 106, 92, 0.12);
+    background: #301917;
+    border-color: var(--danger);
   }
 
   .btn-lg {
-    min-height: 3.25rem;
-    font-size: 1rem;
+    min-height: 3.125rem;
+    font-size: 0.9375rem;
   }
 
-  /* 帳票の区切り: 箱で囲まず、上に太い罫線を引いて見出しを置く */
+  /* 業務端末の入力欄: 凹んだ枠付きフィールド */
+  .field-input {
+    width: 100%;
+    min-height: 2.75rem;
+    border: 1px solid var(--line-strong);
+    background: var(--sunken);
+    padding: 0.5rem 0.75rem;
+    color: var(--foreground);
+    font-family: var(--font-terminal), ui-monospace, monospace;
+    font-size: 0.9rem;
+    outline: none;
+  }
+
+  .field-input:focus {
+    border-color: var(--foreground);
+  }
+
+  .field-input:disabled {
+    opacity: 0.45;
+  }
+
+  /* 帳票の区切り: 上に二重線または太罫線を引いた業務セクション */
   .ledger {
-    border-top: 2px solid var(--foreground);
+    border-top: 2px solid var(--line-strong);
+    border-bottom: 1px solid var(--line);
   }
 
   .ledger-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    background: var(--panel);
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--line);
     font-family: var(--font-document), serif;
     font-weight: 700;
-    font-size: 0.95rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--line);
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
   }
 
   .ledger-row {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.6rem 0;
-    border-bottom: 1px dotted var(--line);
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--line);
     font-size: 0.85rem;
+  }
+
+  .ledger-row:last-child {
+    border-bottom: 0;
+  }
+
+  /* 公文書の紙面: 巨大なぼかし影で宙に浮かせず、端末内に綴じられた紙として見せる */
+  .paper-sheet {
+    --reveal-ink: var(--ink);
+    position: relative;
+    background-color: var(--paper);
+    color: var(--ink);
+    border: 1px solid #8a8475;
+    box-shadow:
+      inset 0 0 0 3px var(--paper),
+      inset 0 0 0 4px rgba(25, 25, 23, 0.14),
+      4px 4px 0 rgba(0, 0, 0, 0.45);
+  }
+
+  /* 端末の暗色パネル内に RichText の黒塗り開示を出すとき用 */
+  .terminal-prose {
+    --reveal-ink: var(--foreground);
   }
 }
 
-/* 点滅カーソル */
+/* 点滅カーソル(コンソール出力のみ) */
 .cursor::after {
   content: "▌";
-  margin-left: 0.1em;
+  margin-left: 0.15em;
   animation: blink 1s steps(1) infinite;
 }
 
@@ -194,11 +236,10 @@ body {
   50% { opacity: 0; }
 }
 
-/* 黒塗り。中身の文字は残して幅を保ち、見えないようにする */
+/* 黒塗り。中身は伏せ字(█)に置き換えてあり(RichText.tsx)、その幅で黒く塗る */
 .redacted {
   background: var(--redact);
   color: transparent;
-  border-radius: 1px;
   user-select: none;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -220,11 +261,11 @@ body {
   outline: 1px solid #a3241a;
 }
 
-/* O5 で黒塗りが右から左へ剥がれていく。黒い層は背景画像なので、折り返した各行に掛かる */
+/* クリアランス到達で黒塗りが右から左へ剥がれていく。折り返した各行に掛かる */
 @keyframes declassify {
   0% { background-size: 100% 100%; color: transparent; }
   55% { color: transparent; }
-  100% { background-size: 0% 100%; color: var(--ink); }
+  100% { background-size: 0% 100%; color: var(--reveal-ink); }
 }
 
 .declassify-reveal {
@@ -236,51 +277,47 @@ body {
   animation: declassify 0.8s cubic-bezier(0.6, 0, 0.3, 1) forwards;
 }
 
-/* O5 で開示された核心 */
+/* 画像の書き出し中は、剥がれる演出の途中でも開示し終えた状態で描く(exportImage.ts) */
+[data-exporting] .declassify-reveal {
+  animation: none;
+  background-size: 0 0;
+  color: var(--reveal-ink);
+}
+
+/* 開示された核心 */
 .declassified {
   /* background の一括指定にすると、剥がれる演出の黒い層(背景画像)まで消えるので色だけ指定する */
-  background-color: rgba(226, 103, 90, 0.14);
-  border-bottom: 1px solid rgba(226, 103, 90, 0.7);
+  background-color: rgba(181, 52, 41, 0.13);
+  border-bottom: 1px solid rgba(181, 52, 41, 0.65);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
 
-/* 走査中の横線 */
-@keyframes sweep {
-  0% { transform: translateY(-10%); }
-  100% { transform: translateY(1100%); }
-}
-
-.sweep {
-  animation: sweep 3.2s linear infinite;
-}
-
-/* 一瞬のノイズ(ページ遷移時など) */
+/* 異常発生時のみに限定して使う一瞬の揺れ */
 @keyframes glitch-in {
-  0% { opacity: 0; transform: translateX(-2px); filter: blur(1px); }
-  30% { opacity: 1; transform: translateX(2px); }
-  60% { transform: translateX(-1px); }
-  100% { opacity: 1; transform: none; filter: none; }
+  0% { opacity: 0; transform: translateX(-2px); }
+  40% { opacity: 1; transform: translateX(2px); }
+  100% { opacity: 1; transform: none; }
 }
 
 .glitch-in {
-  animation: glitch-in 0.35s ease-out backwards; /* 終わったら transform を残さない(残ると fixed の子要素の位置がずれる) */
+  animation: glitch-in 0.25s steps(3) backwards;
 }
 
 /* シャッターの閃光 */
 @keyframes flash {
-  0% { opacity: 0.9; }
+  0% { opacity: 0.85; }
   100% { opacity: 0; }
 }
 
 .flash {
-  animation: flash 0.5s ease-out forwards;
+  animation: flash 0.4s ease-out forwards;
 }
 
 /* 収容違反の警報で画面が赤く点滅する */
 @keyframes breach-flash {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  50% { opacity: 0.6; }
 }
 
 .breach-flash {
@@ -288,9 +325,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .crt-overlay,
   .cursor::after,
-  .sweep,
   .glitch-in,
   .flash,
   .redact-denied,
@@ -301,6 +336,6 @@ body {
   .declassify-reveal {
     animation: none;
     background-size: 0 0;
-    color: var(--ink);
+    color: var(--reveal-ink);
   }
 }

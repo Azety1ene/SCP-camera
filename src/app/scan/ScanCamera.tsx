@@ -5,12 +5,14 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
 import { cctvTimestamp, drawToCanvas, toCctvJpeg, toSourceJpeg } from "@/lib/client/cctv.ts";
 import { newRecordId, saveRecord } from "@/lib/client/db.ts";
-import { rememberFiltered, rememberPhoto } from "@/lib/client/upload-cache.ts";
+import { rememberFiltered, rememberPhoto, rememberShare } from "@/lib/client/upload-cache.ts";
 import { useStaff } from "@/lib/client/progress.ts";
-import { detectFaces, drawRedactions, loadFaceDetector, padBox, redactFacesOnCanvas } from "@/lib/client/faces.ts";
+import { toShareImage } from "@/lib/client/shared.ts";
+import { detectFaces, drawRedactions, loadFaceDetector, loadImageFaceDetector, padBox, redactFacesOnCanvas } from "@/lib/client/faces.ts";
 import { play, startHum, stopHum } from "@/lib/client/sound.ts";
 
 type CameraState = "starting" | "live" | "denied" | "unavailable";
+type Facing = "environment" | "user";
 
 /** カメラ番号はページを読み込むたびに決まる(映像の表示はクライアントでのみ行うので、サーバーとのずれは出ない) */
 const CAM_ID = `CAM-${String(Math.floor(Math.random() * 12) + 1).padStart(2, "0")} / SITE-81██`;
@@ -24,7 +26,7 @@ const SCAN_MESSAGES = [
   "対象を視野中央に収めてください",
 ];
 
-/** 粗いノイズを描き続ける小さなキャンバス。拡大表示して砂嵐に見せる */
+/** 粗いノイズを描き続ける小さなキャンバス。監視映像の粒子感だけをごく薄く乗せる */
 function NoiseLayer() {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -35,7 +37,7 @@ function NoiseLayer() {
     let raf = 0;
     const draw = () => {
       raf = requestAnimationFrame(draw);
-      if (frame++ % 3) return; // 約20fpsで十分
+      if (frame++ % 3) return;
       for (let i = 0; i < image.data.length; i += 4) {
         const v = Math.random() * 255;
         image.data[i] = image.data[i + 1] = image.data[i + 2] = v;
@@ -52,20 +54,66 @@ function NoiseLayer() {
       width={160}
       height={90}
       aria-hidden
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.09] mix-blend-screen [image-rendering:pixelated]"
+      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.07] mix-blend-screen [image-rendering:pixelated]"
     />
   );
 }
 
-function Corners() {
-  const base = "absolute h-8 w-8 border-accent/70";
+/** 工業用監視ファインダーの細いレチクル(無彩色) */
+function Reticle() {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-5">
-      <span className={`${base} left-0 top-0 border-l-2 border-t-2`} />
-      <span className={`${base} right-0 top-0 border-r-2 border-t-2`} />
-      <span className={`${base} bottom-0 left-0 border-b-2 border-l-2`} />
-      <span className={`${base} bottom-0 right-0 border-b-2 border-r-2`} />
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      {/* 四隅の画角目盛り */}
+      <span className="absolute left-4 top-12 h-4 w-4 border-l border-t border-foreground/45" />
+      <span className="absolute right-4 top-12 h-4 w-4 border-r border-t border-foreground/45" />
+      <span className="absolute bottom-14 left-4 h-4 w-4 border-b border-l border-foreground/45" />
+      <span className="absolute bottom-14 right-4 h-4 w-4 border-b border-r border-foreground/45" />
+      {/* 中央十字 */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <span className="block h-px w-8 bg-foreground/45" />
+        <span className="absolute left-1/2 top-1/2 block h-8 w-px -translate-x-1/2 -translate-y-1/2 bg-foreground/45" />
+        <span className="absolute left-1/2 top-1/2 block h-3 w-3 -translate-x-1/2 -translate-y-1/2 border border-foreground/55" />
+      </div>
     </div>
+  );
+}
+
+/** OSD の時刻と計測値だけを独立して更新し、親のカメラ画面を毎秒描き直さないようにする */
+function OsdTelemetry({ camId }: { camId: string }) {
+  const [now, setNow] = useState("");
+  const [hume, setHume] = useState("1.00");
+  const [messageIndex, setMessageIndex] = useState(0);
+
+  useEffect(() => {
+    const tick = () => {
+      setNow(cctvTimestamp(new Date()));
+      setHume((0.97 + Math.random() * 0.06).toFixed(2));
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    const messages = setInterval(() => setMessageIndex((i) => (i + 1) % SCAN_MESSAGES.length), 2800);
+    return () => {
+      clearInterval(timer);
+      clearInterval(messages);
+    };
+  }, []);
+
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between border-b border-white/15 bg-black/65 px-3 py-1.5 font-mono text-[11px] text-foreground">
+        <span className="flex items-center gap-2">
+          <span className="font-bold text-seal-text">● REC</span>
+          <span>{camId}</span>
+        </span>
+        <span className="tabular-nums text-foreground/90">{now}</span>
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 border-t border-white/15 bg-black/70 px-3 py-1.5 font-mono text-[11px]">
+        <span className="truncate text-foreground/90">{SCAN_MESSAGES[messageIndex]}</span>
+        <span className="shrink-0 tabular-nums text-muted">
+          HUME <span className="text-foreground">{hume}</span> Hm
+        </span>
+      </div>
+    </>
   );
 }
 
@@ -78,11 +126,13 @@ export function ScanCamera() {
   const [state, setState] = useState<CameraState>("starting");
   const [capturing, setCapturing] = useState(false);
   const [flash, setFlash] = useState(false);
-  const [now, setNow] = useState("");
-  const [hume, setHume] = useState("1.00");
-  const [messageIndex, setMessageIndex] = useState(0);
   const [faceStatus, setFaceStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  /** 顔検出の読み込みをやり直した回数(やり直すと effect が走り直す) */
+  const [faceRetry, setFaceRetry] = useState(0);
   const [facesInView, setFacesInView] = useState(0);
+  const [facing, setFacing] = useState<Facing>("environment");
+  const [canSwitch, setCanSwitch] = useState(false);
+  const [captureError, setCaptureError] = useState("");
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const camId = CAM_ID;
 
@@ -96,16 +146,22 @@ export function ScanCamera() {
         setState("unavailable");
         return;
       }
+      setState("starting");
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
           audio: false,
         });
-        if (cancelled) return;
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const video = videoRef.current!;
         video.srcObject = stream;
         await video.play();
         setState("live");
+        const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+        if (!cancelled) setCanSwitch(devices.filter((device) => device.kind === "videoinput").length > 1);
       } catch (error) {
         if (cancelled) return;
         setState(error instanceof DOMException && error.name === "NotAllowedError" ? "denied" : "unavailable");
@@ -115,19 +171,19 @@ export function ScanCamera() {
       cancelled = true;
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [clearance]);
+  }, [clearance, facing]);
 
-  // 顔検出の準備
+  // 顔検出の準備。失敗したら「再試行」で読み込み直せる
   useEffect(() => {
     if (!clearance) return;
     let cancelled = false;
-    loadFaceDetector().then((detector) => {
-      if (!cancelled) setFaceStatus(detector ? "ready" : "unavailable");
+    Promise.all([loadFaceDetector(), loadImageFaceDetector()]).then(([video, image]) => {
+      if (!cancelled) setFaceStatus(video && image ? "ready" : "unavailable");
     });
     return () => {
       cancelled = true;
     };
-  }, [clearance]);
+  }, [clearance, faceRetry]);
 
   // 映像に映った顔を、プレビュー上でも黒塗りにする(約8回/秒)
   useEffect(() => {
@@ -148,7 +204,6 @@ export function ScanCamera() {
       const ctx = overlay.getContext("2d")!;
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      // video は object-cover で表示しているので、同じ拡大・切り取りで座標を合わせる
       const scale = Math.max(width / video.videoWidth, height / video.videoHeight);
       const offsetX = (width - video.videoWidth * scale) / 2;
       const offsetY = (height - video.videoHeight * scale) / 2;
@@ -176,32 +231,21 @@ export function ScanCamera() {
     return () => stopHum();
   }, [state]);
 
-  // 時刻・計測値・状態表示の更新
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(cctvTimestamp(new Date()));
-      setHume((0.97 + Math.random() * 0.06).toFixed(2));
-    }, 1000);
-    const messages = setInterval(() => setMessageIndex((i) => (i + 1) % SCAN_MESSAGES.length), 2600);
-    return () => {
-      clearInterval(timer);
-      clearInterval(messages);
-    };
-  }, []);
-
   async function record(canvas: HTMLCanvasElement) {
     const at = new Date();
-    // 人が写っていたら、生成に送る画像と添付資料の両方で顔を黒塗りにする
-    await redactFacesOnCanvas(canvas);
+    setCaptureError("");
+    const faces = await redactFacesOnCanvas(canvas);
     const [photo, photoFiltered] = await Promise.all([toSourceJpeg(canvas), toCctvJpeg(canvas, { camId, at })]);
+    const photoShare = await toShareImage(photoFiltered).catch(() => undefined);
     const id = newRecordId();
-    // 送信には、保存先を経由しないメモリ上のデータを使う(upload-cache.ts を参照)
     await rememberPhoto(id, photo);
     rememberFiltered(id, photoFiltered);
-    await saveRecord({ id, createdAt: at.getTime(), status: "pending", photo, photoFiltered });
+    if (photoShare) rememberShare(id, photoShare);
+    await saveRecord(
+      { id, createdAt: at.getTime(), status: "pending", faceCheck: faces === null ? "skipped" : "done" },
+      { photo, photoFiltered, photoShare },
+    );
     router.push(`/report/${id}`);
-    // Next.js は離れた画面の状態を残し、戻ってきたときにそのまま使う。
-    // 「撮影中」のまま残るとシャッターが押せなくなるので、移動したら元に戻しておく
     setCapturing(false);
     setFlash(false);
   }
@@ -215,117 +259,161 @@ export function ScanCamera() {
     video.pause();
     try {
       await record(drawToCanvas(video));
-    } catch {
+    } catch (error) {
+      console.error("[scan] 記録できませんでした", error);
+      setCaptureError("記録に失敗しました。もう一度撮影してください。");
       setCapturing(false);
-      video.play();
+      setFlash(false);
+      video.play().catch(() => {});
     }
   }
 
   async function onFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const input = event.target;
+    const file = input.files?.[0];
+    input.value = "";
     if (!file) return;
     setCapturing(true);
+    let bitmap: ImageBitmap | null = null;
     try {
-      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-      await record(drawToCanvas(bitmap));
-    } catch {
+      bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      const canvas = drawToCanvas(bitmap);
+      bitmap.close();
+      bitmap = null;
+      await record(canvas);
+    } catch (error) {
+      console.error("[scan] 画像を読み込めませんでした", error);
+      bitmap?.close();
+      setCaptureError("記録画像を読み込めませんでした。別の画像を選んでください。");
       setCapturing(false);
     }
   }
 
+  function onSwitchCamera() {
+    play("tap");
+    setFacing((current) => (current === "environment" ? "user" : "environment"));
+  }
+
   if (!clearance) {
-    return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
+    return <p className="px-4 py-12 font-mono text-xs text-muted">職員認証を確認中 …</p>;
   }
 
   return (
     <TerminalShell staff={staff} screen={{ id: "OBS-0200", name: "観測" }} bare>
-      <div className="relative flex-1 overflow-hidden bg-black">
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className="absolute inset-0 h-full w-full object-cover [filter:grayscale(1)_contrast(1.3)_brightness(0.9)_sepia(0.35)_hue-rotate(55deg)_saturate(0.8)]"
-        />
-        {/* 顔の黒塗り(プレビュー用) */}
-        <canvas ref={overlayRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
-        <NoiseLayer />
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[10%] bg-gradient-to-b from-transparent via-accent/10 to-transparent sweep" />
-        <Corners />
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col border-x border-line/60 bg-black">
+        {/* 映像ファインダー */}
+        <div className="relative flex-1 overflow-hidden bg-black">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="absolute inset-0 h-full w-full object-cover [filter:grayscale(1)_contrast(1.25)_brightness(0.92)_sepia(0.18)_hue-rotate(40deg)_saturate(0.65)]"
+          />
+          <canvas ref={overlayRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
+          <NoiseLayer />
+          <Reticle />
+          <OsdTelemetry camId={camId} />
 
-        {/* 映像上の表示 */}
-        <div className="pointer-events-none absolute inset-x-8 top-7 flex justify-between font-mono text-[11px] text-foreground/90">
-          <span>{camId}</span>
-          <span className="tabular-nums">{now}</span>
+          {/* カメラが使えないとき */}
+          {(state === "denied" || state === "unavailable") && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/95 px-6 text-center text-sm leading-7">
+              <div className="w-full max-w-sm border border-line-strong bg-panel p-5">
+                <p className="font-mono text-xs font-bold text-danger">映像入力なし // NO SIGNAL</p>
+                <p className="mt-2 text-xs leading-6 text-muted">
+                  {state === "denied"
+                    ? "カメラへのアクセスが拒否されました。ブラウザの設定でカメラを許可するか、記録画像を読み込んでください。"
+                    : "この端末ではカメラを利用できません。記録画像を読み込んで照会できます。"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="btn btn-primary mt-4 w-full"
+                >
+                  記録画像を読み込む
+                </button>
+              </div>
+            </div>
+          )}
+          {state === "starting" && (
+            <p className="absolute inset-0 flex items-center justify-center font-mono text-xs text-muted">
+              観測モジュールを起動中 …
+            </p>
+          )}
+          {flash && <div aria-hidden className="flash pointer-events-none absolute inset-0 bg-white" />}
         </div>
-        <div className="pointer-events-none absolute left-8 top-12 text-[11px] text-danger">
-          <span className="cursor">● REC</span>
-        </div>
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 border border-accent/40">
-          <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 bg-accent/80" />
-        </div>
-        <div className="pointer-events-none absolute inset-x-8 bottom-36 flex items-end justify-between font-mono text-[11px] text-accent">
-          <span key={messageIndex} className="glitch-in">
-            {SCAN_MESSAGES[messageIndex]} …
-          </span>
-          <span className="tabular-nums">ヒューム値 {hume} Hm</span>
-        </div>
-        <div className="pointer-events-none absolute inset-x-8 bottom-[7.5rem] font-mono text-[11px]">
-          {facesInView > 0 ? (
-            <span className="text-warn">人物を検出 ── 自動編集を適用中({facesInView})</span>
+
+        {/* 状態バー(エラー・顔認識) */}
+        <div className="border-t border-line bg-sunken px-3 py-1.5 font-mono text-[11px]">
+          {captureError ? (
+            <p role="alert" className="text-danger">
+              [異常] {captureError}
+            </p>
+          ) : facesInView > 0 ? (
+            <p className="text-warn">人物検出({facesInView}) ── 顔領域を自動[編集済み]処理中</p>
+          ) : faceStatus === "unavailable" ? (
+            <p role="status" className="flex flex-wrap items-center justify-between gap-2 text-warn">
+              <span>顔自動編集: 無効(人物の顔は編集されません)</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setFaceStatus("loading");
+                  setFaceRetry((n) => n + 1);
+                }}
+                className="underline text-foreground"
+              >
+                再試行
+              </button>
+            </p>
           ) : (
-            <span className="text-muted">
-              顔認識 {faceStatus === "ready" ? "有効" : faceStatus === "loading" ? "準備中 …" : "無効"}
-            </span>
+            <p className="flex items-center justify-between text-muted">
+              <span>顔自動編集: {faceStatus === "ready" ? "待機中(有効)" : "準備中 …"}</span>
+              <span>画角: {facing === "environment" ? "背面" : "前面"}</span>
+            </p>
           )}
         </div>
 
-        {/* カメラが使えないとき */}
-        {(state === "denied" || state === "unavailable") && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background/90 px-8 text-center text-sm leading-7">
-            <p className="text-danger">観測モジュールに接続できません</p>
-            <p className="text-muted">
-              {state === "denied"
-                ? "カメラへのアクセスが拒否されました。ブラウザの設定でカメラを許可してください。"
-                : "この端末ではカメラを利用できません。"}
-            </p>
+        {/* 機器操作パネル */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-t border-line-strong bg-panel px-4 py-3">
+          <div className="flex justify-start">
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="btn btn-primary pointer-events-auto"
+              disabled={capturing}
+              className="btn btn-secondary min-w-20 px-3 font-mono text-xs"
             >
-              記録画像を読み込む
+              画像読込
             </button>
           </div>
-        )}
-        {state === "starting" && (
-          <p className="absolute inset-0 flex items-center justify-center text-sm text-muted">観測モジュールを起動中 …</p>
-        )}
 
-        {/* 操作 */}
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-10 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={capturing}
-            className="btn btn-secondary h-14 w-16 flex-col gap-0 px-0 text-[10px] leading-tight"
-          >
-            <span className="text-base leading-none">＋</span>
-            画像
-          </button>
           <button
             type="button"
             onClick={onShutter}
             disabled={state !== "live" || capturing}
             aria-label="対象を記録する"
-            className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-accent/80 disabled:opacity-40"
+            className="flex h-16 w-16 items-center justify-center border-2 border-foreground bg-sunken p-1.5 transition-transform active:translate-y-px disabled:opacity-40"
           >
-            <span className="h-14 w-14 rounded-full bg-accent/85 transition-transform active:scale-90" />
+            <span className="flex h-full w-full items-center justify-center bg-foreground font-mono text-[11px] font-bold text-background">
+              {capturing ? "処理" : "記録"}
+            </span>
           </button>
-          <span className="w-16 text-center text-[11px] text-muted">{capturing ? "記録中" : "記録"}</span>
+
+          <div className="flex justify-end">
+            {canSwitch ? (
+              <button
+                type="button"
+                onClick={onSwitchCamera}
+                disabled={capturing}
+                aria-label={facing === "environment" ? "前面のカメラに切り替える" : "背面のカメラに切り替える"}
+                className="btn btn-secondary min-w-20 px-3 font-mono text-xs"
+              >
+                カメラ切替
+              </button>
+            ) : (
+              <span className="font-mono text-[11px] text-muted">{capturing ? "記録中 …" : "待機"}</span>
+            )}
+          </div>
         </div>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
-
-        {flash && <div aria-hidden className="flash pointer-events-none absolute inset-0 bg-white" />}
       </div>
     </TerminalShell>
   );

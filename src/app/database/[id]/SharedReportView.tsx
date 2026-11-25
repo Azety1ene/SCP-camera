@@ -10,6 +10,7 @@ import { useStaff } from "@/lib/client/progress.ts";
 import { deleteShared, fetchShared, SharedError, type SharedReport } from "@/lib/client/shared.ts";
 import { exportImage } from "@/lib/client/exportImage.ts";
 import { play } from "@/lib/client/sound.ts";
+import { ExportStatus, exportOutcome, type ExportState } from "@/components/ExportStatus.tsx";
 
 /** 財団データベースに登録された報告書。黒塗りは、読む人のクリアランスに合わせて外す */
 export function SharedReportView() {
@@ -19,7 +20,8 @@ export function SharedReportView() {
   const router = useRouter();
   const [item, setItem] = useState<SharedReport | null | undefined>(undefined);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState<"" | "export" | "confirm-delete" | "delete">("");
+  const [busy, setBusy] = useState<"" | "confirm-delete" | "delete">("");
+  const [exportState, setExportState] = useState<ExportState>("idle");
   /** この端末から登録した記録(あれば、取り下げられる) */
   const [own, setOwn] = useState<ContainmentRecord | null>(null);
   const documentRef = useRef<HTMLElement>(null);
@@ -34,9 +36,12 @@ export function SharedReportView() {
         if (cause instanceof SharedError && cause.code === "not_found") setItem(null);
         else setError(cause instanceof SharedError ? cause.message : "財団データベースに接続できません。");
       });
-    listRecords().then((records) => {
-      if (!cancelled) setOwn(records.find((r) => r.sharedId === id && r.sharedDeleteKey) ?? null);
-    });
+    listRecords()
+      .then((records) => {
+        if (!cancelled) setOwn(records.find((r) => r.sharedId === id && r.sharedDeleteKey) ?? null);
+      })
+      // 端末の記録を読めなくても、報告書は表示する(取り下げのボタンが出ないだけ)
+      .catch((cause) => console.warn("[database] 端末の記録を読み込めませんでした", cause));
     return () => {
       cancelled = true;
     };
@@ -52,13 +57,12 @@ export function SharedReportView() {
 
   async function onExport() {
     if (!documentRef.current || !item) return;
-    setBusy("export");
+    setExportState("busy");
     try {
-      await exportImage(documentRef.current, `${item.itemNumber}.png`, "#e9e6dc");
-    } catch {
-      // 共有を取り消したときなど
-    } finally {
-      setBusy("");
+      setExportState(exportOutcome(await exportImage(documentRef.current, `${item.itemNumber}.png`, "#ece8dc")));
+    } catch (cause) {
+      console.error("[database] 画像を書き出せませんでした", cause);
+      setExportState("error");
     }
   }
 
@@ -109,10 +113,11 @@ export function SharedReportView() {
             recordedAt={new Date(item.createdAt)}
           />
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
-            <button type="button" onClick={onExport} disabled={busy !== ""} className="btn btn-primary">
-              {busy === "export" ? "書き出し中 …" : "報告書を画像で保存"}
+            <button type="button" onClick={onExport} disabled={exportState === "busy" || busy === "delete"} className="btn btn-primary">
+              {exportState === "busy" ? "書き出し中 …" : "報告書を画像で保存"}
             </button>
           </div>
+          <ExportStatus state={exportState} subject="報告書" />
 
           {/* O5 は何でも抹消できる。登録した端末は取り下げられる */}
           {(clearance === "O5" || own) && (

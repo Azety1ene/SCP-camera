@@ -26,3 +26,15 @@ export function isSampleMode(): boolean {
 export function pickSampleReport(random: () => number = Math.random): SampleReport {
   return SAMPLE_REPORTS[Math.floor(random() * SAMPLE_REPORTS.length)];
 }
+
+/**
+ * 見本の報告書の番号を付け替える。見本は3件しかないので、そのままでは財団データベースで番号が重なる。
+ * 本文中の「SCP-7293-JP」「補遺7293-JP-1」なども、まとめて新しい番号にする
+ */
+export function renumberSample(sample: SampleReport, itemNumber: string): SampleReport {
+  const from = sample.itemNumber.replace(/^SCP-/, "");
+  const to = itemNumber.replace(/^SCP-/, "");
+  if (from === to) return sample;
+  const report = JSON.parse(JSON.stringify(sample.report).split(from).join(to)) as GeneratedReport;
+  return { ...sample, itemNumber, report };
+}

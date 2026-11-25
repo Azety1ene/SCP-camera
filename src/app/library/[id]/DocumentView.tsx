@@ -18,12 +18,12 @@ function Denied({ doc, clearance }: { doc: ArchiveDocument; clearance: string })
     play("deny");
   }, []);
   return (
-    <div className="border-2 border-danger/70 px-4 py-8 text-center">
-      <p className="text-sm font-bold tracking-[0.3em] text-danger">ACCESS DENIED</p>
+    <div className="border-2 border-seal bg-panel p-6 text-center">
+      <p className="font-mono text-xs font-bold tracking-[0.2em] text-seal-text">閲覧拒否 // ACCESS DENIED</p>
       <p className="mt-3 text-xs leading-6 text-muted">
-        この文書の閲覧には {CLEARANCE_LABEL[doc.required]} 以上のクリアランスが必要です。
+        この文書の閲覧には <span className="font-mono text-foreground">{CLEARANCE_LABEL[doc.required]}</span> 以上のクリアランスが必要です。
         <br />
-        あなたのクリアランス({clearance})では閲覧できません。
+        現在のクリアランス({clearance})では閲覧できません。
       </p>
     </div>
   );
@@ -52,11 +52,14 @@ function PasscodeGate({ doc }: { doc: ArchiveDocument }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="ledger px-0 py-6 text-sm">
-      <p className="font-bold">この文書はパスコードで保護されています</p>
-      <p className="mt-2 text-xs leading-6 text-muted">パスコードは、所管部門から別途通知されます。</p>
-      <div className="mt-4 flex items-center gap-2 border-b border-line focus-within:border-accent">
-        <span className="text-accent">&gt;</span>
+    <form onSubmit={onSubmit} className="ledger">
+      <div className="ledger-title">
+        <h2>文書解錠プロンプト</h2>
+        <span className="font-mono text-[10px] font-normal text-warn">[施錠]</span>
+      </div>
+      <div className="bg-sunken p-5 text-sm">
+        <p className="font-bold text-foreground">この文書はパスコードで保護されています</p>
+        <p className="mt-1.5 text-xs leading-6 text-muted">パスコードは所管部門から別途通知されます。</p>
         <input
           value={code}
           onChange={(event) => setCode(event.target.value)}
@@ -64,13 +67,18 @@ function PasscodeGate({ doc }: { doc: ArchiveDocument }) {
           spellCheck={false}
           enterKeyHint="go"
           aria-label="パスコード"
-          className="w-full bg-transparent py-2 text-foreground outline-none"
+          placeholder="パスコードを入力"
+          className="field-input mt-4"
         />
+        {message && (
+          <p role="alert" className="mt-2 text-xs text-danger">
+            {message}
+          </p>
+        )}
+        <button type="submit" className="btn btn-primary mt-4 w-full sm:w-auto sm:min-w-40">
+          解錠を実行する
+        </button>
       </div>
-      {message && <p className="mt-2 text-xs text-danger">{message}</p>}
-      <button type="submit" className="btn btn-primary mt-4 w-full">
-        解錠する
-      </button>
     </form>
   );
 }
@@ -81,13 +89,13 @@ export function DocumentView() {
   const unlocked = useUnlockedDocs();
   const doc = findDocument(id);
 
-  if (!staff) return <p className="px-4 py-12 text-sm text-muted">職員認証を確認中 …</p>;
+  if (!staff) return <p className="px-4 py-12 font-mono text-xs text-muted">職員認証を確認中 …</p>;
 
   return (
     <TerminalShell staff={staff} screen={{ id: "LIB-0410", name: "文書閲覧" }}>
-      <Link href="/library" className="btn btn-secondary mb-4 self-start">
+      <Link href="/library" className="btn btn-secondary mb-4 self-start text-xs">
         <BackIcon className="h-4 w-4" />
-        書庫に戻る
+        文書管理台帳に戻る
       </Link>
       {!doc ? (
         <p className="text-sm text-danger">該当する文書は存在しません。</p>
@@ -96,7 +104,7 @@ export function DocumentView() {
       ) : doc.passcode && staff.clearance !== "O5" && !unlocked.includes(doc.id) ? (
         <PasscodeGate doc={doc} />
       ) : (
-        <article className="relative bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">
+        <article data-classified className="paper-sheet px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] sm:px-10">
           <div className="flex items-start justify-between gap-4 border-b-2 border-ink pb-3">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[10.5px] leading-5 text-ink/80">
               <dt>発行</dt>
@@ -108,11 +116,11 @@ export function DocumentView() {
             </dl>
             <ApprovalBox stamps={doc.stamps} />
           </div>
-          <div className="relative">
-            <h2 className="mt-6 pr-16 text-xl font-bold leading-snug">{doc.title}</h2>
+          <div className="relative border-b border-ink/25 pb-4">
+            <h2 className="mt-5 pr-20 text-xl font-bold leading-snug">{doc.title}</h2>
             {doc.required !== "L2" && <ClassifiedStamp />}
           </div>
-          <div className="mt-4">
+          <div className="mt-5">
             <RichText text={doc.body} clearance={staff.clearance} className="mb-3" />
           </div>
         </article>

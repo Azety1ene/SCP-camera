@@ -5,8 +5,7 @@ import { play, setSoundEnabled, unlockAudio, useSoundEnabled } from "@/lib/clien
 import { SpeakerIcon } from "@/components/Icons.tsx";
 
 /**
- * 効果音の入/切。機器のスイッチのように「入」「切」の2つを並べ、今の位置を白黒反転で示す。
- * どちらを押しても、その状態に切り替わる。
+ * 効果音の入/切。機器のトグルスイッチのように「入」「切」の2つを並べ、現在の位置を反転で示す。
  */
 export function SoundToggle({ className = "" }: { className?: string }) {
   const enabled = useSoundEnabled();
@@ -17,15 +16,17 @@ export function SoundToggle({ className = "" }: { className?: string }) {
     if (next) play("tap");
   };
   const segment = (active: boolean) =>
-    `flex h-full min-w-9 items-center justify-center px-2 ${active ? "bg-foreground text-[#111416]" : "text-muted hover:text-foreground"}`;
+    `flex h-full min-w-8 items-center justify-center px-1.5 font-mono text-[11px] font-bold transition-colors ${
+      active ? "bg-foreground text-background" : "bg-sunken text-muted hover:text-foreground"
+    }`;
   return (
-    <div role="group" aria-label="効果音" className={`flex h-9 items-center gap-1.5 text-[11px] ${className}`}>
-      <SpeakerIcon muted={!enabled} className={`h-4 w-4 ${enabled ? "text-foreground" : "text-muted"}`} />
-      <span className="flex h-8 items-stretch border border-[#48535a] font-bold">
+    <div role="group" aria-label="効果音" className={`flex h-8 items-center gap-1.5 text-[11px] ${className}`}>
+      <SpeakerIcon muted={!enabled} className={`h-3.5 w-3.5 shrink-0 ${enabled ? "text-foreground" : "text-muted"}`} />
+      <span className="flex h-7 items-stretch border border-line-strong">
         <button type="button" aria-pressed={enabled} onClick={() => set(true)} className={segment(enabled)}>
           入
         </button>
-        <button type="button" aria-pressed={!enabled} onClick={() => set(false)} className={`${segment(!enabled)} border-l border-[#48535a]`}>
+        <button type="button" aria-pressed={!enabled} onClick={() => set(false)} className={`${segment(!enabled)} border-l border-line-strong`}>
           切
         </button>
       </span>

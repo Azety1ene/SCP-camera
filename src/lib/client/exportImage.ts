@@ -7,7 +7,14 @@ export type ExportResult = "shared" | "downloaded" | "cancelled";
  */
 export async function exportImage(node: HTMLElement, fileName: string, backgroundColor?: string): Promise<ExportResult> {
   const { toBlob } = await import("html-to-image");
-  const blob = await toBlob(node, { pixelRatio: 2, backgroundColor });
+  // 黒塗りが剥がれる演出の途中でも、開示し終えた状態で書き出す(globals.css の [data-exporting])
+  node.dataset.exporting = "";
+  let blob: Blob | null;
+  try {
+    blob = await toBlob(node, { pixelRatio: 2, backgroundColor });
+  } finally {
+    delete node.dataset.exporting;
+  }
   if (!blob) throw new Error("画像を作成できませんでした");
   const file = new File([blob], fileName, { type: "image/png" });
   const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;

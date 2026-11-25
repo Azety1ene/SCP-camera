@@ -15,6 +15,11 @@ export type Mail = {
   body: string;
   /** 届く条件 */
   when: (ctx: MailContext) => boolean;
+  /**
+   * 宛先のクリアランス(合言葉で付与されたもの)。省略すると全職員宛て。
+   * 一度届いたメールも、宛先でないクリアランスで認証し直したときは受信箱に出さない
+   */
+  to?: ServerClearance;
   /** 一覧で目立たせる(辞令など) */
   important?: boolean;
 };
@@ -25,6 +30,7 @@ export const MAILS: Mail[] = [
     from: "観測記録部門 人事係",
     address: "jinji.kansoku@site81.scp.int",
     subject: "着任のご案内",
+    to: "L2",
     when: (ctx) => ctx.server !== "O5",
     body: `新任職員各位
 
@@ -46,6 +52,7 @@ export const MAILS: Mail[] = [
     from: "観測記録部門 記録課",
     address: "kiroku.kansoku@site81.scp.int",
     subject: "初回観測記録の受理について",
+    to: "L2",
     when: (ctx) => ctx.server !== "O5" && ctx.contained >= 1,
     body: `あなたの初回観測記録を受理しました。
 
@@ -77,6 +84,7 @@ export const MAILS: Mail[] = [
     address: "jinji@jp.scp.int",
     subject: "辞令(クリアランスレベル3)",
     important: true,
+    to: "L2",
     when: (ctx) => ctx.server !== "O5" && ctx.contained >= 3,
     body: `辞令
 
@@ -100,6 +108,7 @@ export const MAILS: Mail[] = [
     address: "jinji@jp.scp.int",
     subject: "辞令(クリアランスレベル4)",
     important: true,
+    to: "L2",
     when: (ctx) => ctx.server !== "O5" && ctx.contained >= 6,
     body: `辞令
 
@@ -122,6 +131,7 @@ export const MAILS: Mail[] = [
     from: "観測記録部門 部門長室",
     address: "bumoncho.kansoku@site81.scp.int",
     subject: "【要確認】設置経緯書のパスコードについて",
+    to: "L2",
     when: (ctx) => ctx.server !== "O5" && ctx.contained >= 6,
     body: `設置経緯書のパスコードは、規則によりメールでは通知できません。
 
@@ -137,10 +147,11 @@ export const MAILS: Mail[] = [
     address: "[編集済み]",
     subject: "(件名なし)",
     important: true,
+    to: "O5",
     when: (ctx) => ctx.server === "O5",
     body: `観測を続けなさい。
 
-端末が何を記録しているかを、[[あなたが知る必要はない]]。あなたが知る必要があるのは、あなたが目を向けた物が、記録された時点で財団の管理下に入るということだけだ。
+端末が何を記録しているかを、[[O5:あなたが知る必要はない]]。あなたが知る必要があるのは、あなたが目を向けた物が、記録された時点で財団の管理下に入るということだけだ。
 
 このメールは閲覧後、あなたの記憶から削除される。`,
   },
@@ -152,7 +163,7 @@ export const MAILS: Mail[] = [
     when: (ctx) => ctx.contained >= 8,
     body: `あなたが撮った物は、まだそこにありますか。
 
-[[わたしが撮った物は、もうありません。]]
+[[L4:わたしが撮った物は、もうありません。]]
 
 このメールに心当たりがない場合は、削除せずに保管してください。`,
   },

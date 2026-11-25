@@ -43,3 +43,9 @@ next-env.d.ts
 
 # スマホ確認用の自己署名証明書
 /.certificates/
+
+# 顔検出の WASM(scripts/copy-mediapipe.mjs が node_modules から写す)
+/public/mediapipe/
+
+# 顔検出の WASM(scripts/copy-mediapipe.mjs が node_modules から写す)
+/public/mediapipe/

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 顔検出の WASM の読み込み口(scripts/copy-mediapipe.mjs が node_modules から写したもの)
+    "public/mediapipe/**",
   ]),
 ]);
 

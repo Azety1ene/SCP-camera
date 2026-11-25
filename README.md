@@ -16,6 +16,9 @@ cp .env.example .env.local   # 値を設定する
 pnpm dev
 ```
 
+- `pnpm dev` / `pnpm build` は、先に顔検出の WASM を `node_modules` から `public/mediapipe/wasm/` に写す(`scripts/copy-mediapipe.mjs`。Git には含めない)
+- `pnpm test` で単体テスト(Vitest)、`pnpm lint` で ESLint
+
 ### スマホの実機で確認する
 
 スマホのカメラはHTTPSでないと使えないので、専用のコマンドで起動する。
@@ -36,7 +39,11 @@ pnpm dev:phone
 
 ## 技術構成
 
-Next.js(App Router)/ Tailwind CSS / Gemini API / Vercel。DBは使わない(報告書はブラウザの IndexedDB に保存)。
+Next.js(App Router)/ Tailwind CSS / Gemini API / Vercel。
+
+- 報告書と写真は、ブラウザの IndexedDB に保存する
+- 利用者が登録した報告書だけ、全職員で共有する「財団データベース」に送る。本文は Neon(Postgres)、添付画像は Vercel Blob の private のストア(`SCP_CAMERA_IMAGE_READ_WRITE_TOKEN`)に置き、認証済みの Cookie を確かめる `/api/shared/[id]/image` から配信する
+- 認証・照会・登録のレート制限も Neon の表で数える(`DATABASE_URL` が未設定なら制限しない)
 
 ## ライセンス
 

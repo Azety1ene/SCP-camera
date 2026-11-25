@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { MAILS, type Mail, type MailContext } from "@/lib/content/mail.ts";
+import type { ServerClearance } from "./session.ts";
 
 /**
  * 端末内に保存する小さな状態(localStorage)。保存できない環境でも画面は動くようにする。
@@ -114,9 +115,14 @@ export function syncMail(ctx: MailContext): Mail[] {
 
 export type InboxItem = Mail & { arrivedAt: number; read: boolean };
 
-export function useInbox(): InboxItem[] {
+/**
+ * 受信箱。server(合言葉で付与されたクリアランス)宛てのメールだけを返す。
+ * 同じ端末で L2 と O5 を入れ替えて認証しても、もう一方宛てのメールは出さない。認証の確認中(undefined)は空
+ */
+export function useInbox(server: ServerClearance | undefined): InboxItem[] {
   const state = useStored<MailState>(MAIL_KEY, EMPTY_MAIL);
-  return MAILS.filter((mail) => state.arrived[mail.id])
+  if (!server) return [];
+  return MAILS.filter((mail) => state.arrived[mail.id] && (!mail.to || mail.to === server))
     .map((mail) => ({ ...mail, arrivedAt: state.arrived[mail.id], read: state.read.includes(mail.id) }))
     .sort((a, b) => b.arrivedAt - a.arrivedAt);
 }

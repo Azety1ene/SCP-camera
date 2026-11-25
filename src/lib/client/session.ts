@@ -25,10 +25,28 @@ export function hasClearance(have: Clearance, required: Clearance): boolean {
   return CLEARANCE_RANK[have] >= CLEARANCE_RANK[required];
 }
 
+/*
+ * 認証の確認結果を、ページの中で覚えておく。
+ * 画面を移るたびに /api/auth の応答を待つと、そのあいだ画面全体が「確認中」に切り替わってちらつくので、
+ * 前に確認した結果ですぐに描き、裏で確かめ直す(認証が切れていたら、その時点で認証端末へ戻す)。
+ * ページを読み込み直したときは覚えていないので、サーバーとクライアントの最初の描画は一致する。
+ */
+let known: ServerClearance | null | undefined = undefined;
+
+export function knownClearance(): ServerClearance | null | undefined {
+  return known;
+}
+
+/** 認証・退出したときに、覚えている結果を差し替える */
+export function rememberClearance(value: ServerClearance | null) {
+  known = value;
+}
+
 export async function fetchClearance(): Promise<ServerClearance | null> {
   try {
     const res = await fetch("/api/auth", { cache: "no-store" });
     const body = (await res.json()) as { clearance: ServerClearance | null };
+    known = body.clearance;
     return body.clearance;
   } catch {
     return null;
@@ -37,11 +55,11 @@ export async function fetchClearance(): Promise<ServerClearance | null> {
 
 /**
  * 認証が必要な画面で使う。未認証なら認証端末(/)へ戻す。
- * 判定が終わるまでは undefined を返す。
+ * 判定が終わるまでは undefined を返す(前に確認した結果があれば、それを先に返す)。
  */
 export function useRequireClearance(): ServerClearance | undefined {
   const router = useRouter();
-  const [clearance, setClearance] = useState<ServerClearance | undefined>(undefined);
+  const [clearance, setClearance] = useState<ServerClearance | undefined>(() => known ?? undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,5 +83,6 @@ export async function logout(): Promise<void> {
   } catch {
     // 無視してよい
   }
+  known = null;
   await fetch("/api/auth", { method: "DELETE" });
 }

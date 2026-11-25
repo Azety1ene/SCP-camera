@@ -5,13 +5,23 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TerminalShell, useTerminalId } from "@/components/TerminalShell.tsx";
-import { deleteShared, SharedError, shareReport } from "@/lib/client/shared.ts";
+import { deleteShared, SharedError, shareReport, tokenStatus, toShareImage } from "@/lib/client/shared.ts";
 import { ReportDocument } from "@/components/report/ReportDocument.tsx";
-import { deleteRecord, getRecord, updateRecord, type ContainmentRecord } from "@/lib/client/db.ts";
+import {
+  deleteRecord,
+  getPhotos,
+  getRecord,
+  RECORDS_EVENT,
+  updatePhotos,
+  updateRecord,
+  type ContainmentRecord,
+  type RecordPhotos,
+} from "@/lib/client/db.ts";
 import { useStaff } from "@/lib/client/progress.ts";
-import { useObjectUrl } from "@/lib/client/useObjectUrl.ts";
+import { useObjectUrlState } from "@/lib/client/useObjectUrl.ts";
 import { play } from "@/lib/client/sound.ts";
-import { forgetPhoto, freshFiltered, photoBytes } from "@/lib/client/upload-cache.ts";
+import { forgetAll, forgetPhoto, freshFiltered, freshShare, photoBytes, rememberShare } from "@/lib/client/upload-cache.ts";
+import { ExportStatus, exportOutcome, type ExportState } from "@/components/ExportStatus.tsx";
 import { setRating, useRatings } from "@/lib/client/store.ts";
 import type { GeneratedReport } from "@/lib/report/schema.ts";
 
@@ -32,15 +42,28 @@ const QUERY_STEPS = [
 /** 同じ記録を二重に生成しないため(画面が描き直されても、照会は1件につき1回) */
 const inFlight = new Set<string>();
 
-/** 記録が更新されたことを、表示中の画面に知らせるイベント */
-const RECORD_EVENT = "scp-record-change";
-
-function announce(id: string) {
-  window.dispatchEvent(new CustomEvent(RECORD_EVENT, { detail: id }));
+/**
+ * 財団データベースに登録するときの添付画像。照会のときに指紋をサーバーに渡すので、一度作ったものを使い続ける。
+ * 撮影時に作ってあるが、それより前に撮った記録では、ここで作って保存する
+ */
+async function shareImageFor(id: string, photos: RecordPhotos | undefined): Promise<Blob | undefined> {
+  const remembered = freshShare(id) ?? photos?.photoShare;
+  if (remembered) return remembered;
+  const filtered = freshFiltered(id) ?? photos?.photoFiltered;
+  if (!filtered) return undefined;
+  try {
+    const image = await toShareImage(filtered);
+    rememberShare(id, image);
+    await updatePhotos(id, { photoShare: image });
+    return image;
+  } catch (error) {
+    console.warn("[query] 登録用の添付画像を作れませんでした", error);
+    return undefined;
+  }
 }
 
 /**
- * 照会(報告書の生成)。結果は IndexedDB に書き、イベントで知らせる。
+ * 照会(報告書の生成)。結果は IndexedDB に書く(書くと db.ts がイベントで知らせる)。
  * 画面のコンポーネントの外で動かすので、画面が作り直されても結果を取りこぼさない。
  */
 async function runQuery(current: ContainmentRecord) {
@@ -52,18 +75,20 @@ async function runQuery(current: ContainmentRecord) {
     attempts: (current.attempts ?? 0) + 1,
     error: undefined,
   });
-  announce(current.id);
 
   let patch: Partial<ContainmentRecord>;
   try {
     // 写真のデータを先に読み出しておく(保存先の Blob をそのまま送ると、iPhone で送信に失敗することがある)
     let bytes: ArrayBuffer;
+    let share: Blob | undefined;
     try {
-      bytes = await photoBytes(current.id, current.photo);
+      const photos = await getPhotos(current.id);
+      bytes = await photoBytes(current.id, photos?.photo);
+      share = await shareImageFor(current.id, photos);
     } catch (error) {
       throw new QueryError("read", error);
     }
-    const res = await postWithRetry(bytes);
+    const res = await postWithRetry(bytes, share);
     let body: GenerateResponse | null = null;
     try {
       body = (await res.json()) as GenerateResponse;
@@ -95,7 +120,6 @@ async function runQuery(current: ContainmentRecord) {
   }
   if (patch.status === "done") forgetPhoto(current.id);
   await updateRecord(current.id, patch);
-  announce(current.id);
   play(patch.status === "done" ? "complete" : "deny");
 }
 
@@ -109,10 +133,11 @@ class QueryError extends Error {
 }
 
 /** 送信する。通信そのものに失敗したら、少し待って1回だけ送り直す */
-async function postWithRetry(bytes: ArrayBuffer): Promise<Response> {
+async function postWithRetry(bytes: ArrayBuffer, share: Blob | undefined): Promise<Response> {
   const send = () => {
     const form = new FormData();
     form.append("image", new Blob([bytes], { type: "image/jpeg" }), "capture.jpg");
+    if (share) form.append("attachment", share, share.type === "image/webp" ? "attachment.webp" : "attachment.jpg");
     return fetch("/api/generate", { method: "POST", body: form });
   };
   try {
@@ -137,7 +162,7 @@ function formatElapsed(ms: number) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function QueryLog({ startedAt, photoUrl }: { startedAt: number; photoUrl: string }) {
+function QueryLog({ startedAt, photoUrl }: { startedAt: number; photoUrl: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -148,20 +173,33 @@ function QueryLog({ startedAt, photoUrl }: { startedAt: number; photoUrl: string
   const shown = Math.min(QUERY_STEPS.length, 1 + Math.floor(elapsed / 7000));
 
   return (
-    <div className="grid gap-6 sm:grid-cols-[1fr_1.2fr]">
-      <div className="relative overflow-hidden border border-line">
-        {/* eslint-disable-next-line @next/next/no-img-element -- IndexedDB の Blob を表示するため */}
-        <img src={photoUrl} alt="照会中の記録画像" className="w-full" />
-        <div aria-hidden className="sweep absolute inset-x-0 top-0 h-[10%] bg-gradient-to-b from-transparent via-accent/25 to-transparent" />
+    <div className="grid gap-5 sm:grid-cols-[1fr_1.25fr]">
+      <div className="border border-line-strong bg-sunken">
+        <div className="flex items-center justify-between border-b border-line bg-panel px-2.5 py-1 font-mono text-[10px] text-muted">
+          <span>添付資料(照会中)</span>
+          <span className="tabular-nums">{formatElapsed(elapsed)}</span>
+        </div>
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- IndexedDB の Blob を表示するため
+          <img src={photoUrl} alt="照会中の記録画像" className="w-full" />
+        ) : (
+          <div className="flex aspect-[4/3] w-full items-center justify-center bg-sunken font-mono text-[11px] text-muted">
+            記録画像 ── 表示できません
+          </div>
+        )}
       </div>
-      <div className="text-sm leading-7">
-        <p className="font-bold text-accent">財団データベースに照会中</p>
-        <p className="mb-3 text-xs text-muted">経過 {formatElapsed(elapsed)} ／ 照会には数分かかることがあります。この画面を開いたままお待ちください。</p>
-        {QUERY_STEPS.slice(0, shown).map((step) => (
-          <p key={step} className="glitch-in text-muted">
-            &gt; {step}
-          </p>
-        ))}
+      <div className="border border-line-strong bg-sunken p-4 font-mono text-[12.5px] leading-7">
+        <p className="border-b border-line pb-2 font-bold text-foreground">財団データベース照会電文</p>
+        <p className="mt-2 mb-3 text-[11px] leading-5 text-muted">
+          経過 {formatElapsed(elapsed)} ／ 照会には数分かかることがあります。この画面を開いたままお待ちください。
+        </p>
+        <div className="space-y-0.5">
+          {QUERY_STEPS.slice(0, shown).map((step) => (
+            <p key={step} className="text-muted">
+              &gt; {step}
+            </p>
+          ))}
+        </div>
         <p className="cursor mt-1 text-foreground">{shown >= QUERY_STEPS.length ? "> 照会を継続中" : ""}</p>
       </div>
     </div>
@@ -175,28 +213,32 @@ function RatingBox({ recordId }: { recordId: string }) {
     play("tap");
     setRating(recordId, value === next ? 0 : next);
   };
-  const base = "h-10 w-10 rounded-md border font-mono text-base leading-none";
+  const base = "h-9 w-9 border font-mono text-sm font-bold leading-none transition-colors";
   return (
-    <div className="mt-4 flex items-center gap-2 font-mono text-xs text-muted">
-      <span>評価: {value > 0 ? `+${value}` : value}</span>
-      <button
-        type="button"
-        title="好き"
-        aria-pressed={value === 1}
-        onClick={() => toggle(1)}
-        className={`${base} ${value === 1 ? "border-accent bg-accent text-background" : "border-line hover:text-foreground"}`}
-      >
-        +
-      </button>
-      <button
-        type="button"
-        title="好きじゃない"
-        aria-pressed={value === -1}
-        onClick={() => toggle(-1)}
-        className={`${base} ${value === -1 ? "border-danger bg-danger text-background" : "border-line hover:text-foreground"}`}
-      >
-        –
-      </button>
+    <div className="mt-5 flex items-center justify-between border border-line bg-panel px-3 py-2 font-mono text-xs text-muted">
+      <span>
+        記録評価: <strong className="text-foreground">{value > 0 ? `+${value}` : value}</strong>
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          title="好き"
+          aria-pressed={value === 1}
+          onClick={() => toggle(1)}
+          className={`${base} ${value === 1 ? "border-accent bg-accent text-background" : "border-line-strong bg-sunken text-foreground hover:bg-raised"}`}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          title="好きじゃない"
+          aria-pressed={value === -1}
+          onClick={() => toggle(-1)}
+          className={`${base} ${value === -1 ? "border-danger bg-danger text-background" : "border-line-strong bg-sunken text-foreground hover:bg-raised"}`}
+        >
+          –
+        </button>
+      </div>
     </div>
   );
 }
@@ -204,9 +246,12 @@ function RatingBox({ recordId }: { recordId: string }) {
 const PUBLIC_NOTICE =
   "登録すると、この報告書と添付画像が全職員に公開されます。人物の顔は編集済みの状態で公開されますが、写り込んだ物や場所はそのまま公開されます。";
 
+const FACE_SKIPPED_NOTICE =
+  "この記録は、顔認識を利用できない状態で撮影されました。人物の顔が写っている場合、編集されないまま公開されます。登録する前に添付画像を確認してください。";
+
 /**
  * 財団データベース(全職員で共有)への登録と取り下げ。
- * 照会の直後は「登録する / この端末にのみ保存」を選んでもらう。端末にのみ保存しても、後から登録できる
+ * 照会の直後は「登録する / この端末にのみ保存」を選んでもらう。端末にのみ保存しても、後から登録できる(登録票の期限内)
  */
 function SharePanel({ record, onChange }: { record: ContainmentRecord; onChange: (patch: Partial<ContainmentRecord>) => void }) {
   const terminalId = useTerminalId();
@@ -223,8 +268,10 @@ function SharePanel({ record, onChange }: { record: ContainmentRecord; onChange:
     setBusy(true);
     setError("");
     try {
-      const photo = freshFiltered(record.id) ?? record.photoFiltered;
-      const { id, deleteKey } = await shareReport(record.shareToken!, photo, `81-OP-${terminalId.slice(-4)}`);
+      // 照会のときに指紋を渡した添付画像をそのまま送る(作り直すと一致しない)
+      const image = freshShare(record.id) ?? (await getPhotos(record.id))?.photoShare;
+      if (!image) throw new SharedError("no_image", "登録用の添付画像が見つかりません。再照会した記録は登録できます。");
+      const { id, deleteKey } = await shareReport(record.shareToken!, image, `81-OP-${terminalId.slice(-4)}`);
       await save({ sharedId: id, sharedDeleteKey: deleteKey, shareDeclined: false });
       setMode("idle");
       play("complete");
@@ -269,7 +316,7 @@ function SharePanel({ record, onChange }: { record: ContainmentRecord; onChange:
         <p className="text-accent">財団データベースに登録済み</p>
         {mode === "withdraw" ? (
           <div className="mt-3 space-y-3">
-            <p className="text-xs leading-6">財団データベースから取り下げます。全職員が閲覧できなくなります。この端末の記録は残り、後からもう一度登録できます。</p>
+            <p className="text-xs leading-6">財団データベースから取り下げます。全職員が閲覧できなくなります。この端末の記録は残り、登録票の期限内なら後からもう一度登録できます。</p>
             <div className="flex flex-wrap gap-3">
               <button type="button" onClick={onWithdraw} disabled={busy} className="btn btn-danger">
                 {busy ? "取り下げ中 …" : "取り下げる"}
@@ -296,36 +343,55 @@ function SharePanel({ record, onChange }: { record: ContainmentRecord; onChange:
     );
   }
 
+  // 登録票が古い形式・期限切れのときは、登録できないことを先に伝える
+  const status = tokenStatus(record.shareToken!);
+  if (status !== "ok") {
+    return (
+      <p className="mt-6 border-t border-line pt-4 text-xs leading-6 text-muted">
+        {status === "expired"
+          ? "登録票の有効期限(照会から30日)が切れているため、財団データベースに登録できません。"
+          : "この記録の登録票は古い形式のため、財団データベースに登録できません。再照会すると登録できるようになります。"}
+      </p>
+    );
+  }
+
   // 照会の直後(まだ選んでいない)か、「登録する」を押したとき: 登録するかどうかを選ぶ
   if (!record.shareDeclined || mode === "ask") {
     return (
-      <div className="mt-6 border border-line bg-panel p-4 text-sm">
-        <p className="font-bold">この報告書を財団データベースに登録しますか?</p>
-        <p className="mt-2 text-xs leading-6 text-muted">{PUBLIC_NOTICE}</p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button type="button" onClick={onShare} disabled={busy} className="btn btn-primary">
-            {busy ? "登録中 …" : "登録する"}
-          </button>
-          {record.shareDeclined ? (
-            <button type="button" onClick={() => setMode("idle")} disabled={busy} className="btn btn-secondary">
-              やめる
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                play("tap");
-                save({ shareDeclined: true });
-              }}
-              disabled={busy}
-              className="btn btn-secondary"
-            >
-              この端末にのみ保存
-            </button>
-          )}
+      <section className="ledger mt-6">
+        <div className="ledger-title">
+          <h3>財団データベース 登録手続</h3>
+          <span className="font-mono text-[10px] font-normal text-muted">全職員共有</span>
         </div>
-        {errorLine}
-      </div>
+        <div className="bg-sunken p-4 text-sm">
+          <p className="font-bold text-foreground">この報告書を財団データベースに登録しますか?</p>
+          <p className="mt-2 text-xs leading-6 text-muted">{PUBLIC_NOTICE}</p>
+          {record.faceCheck === "skipped" && <p className="mt-2 text-xs leading-6 text-warn">{FACE_SKIPPED_NOTICE}</p>}
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="button" onClick={onShare} disabled={busy} className="btn btn-primary">
+              {busy ? "登録中 …" : "登録する"}
+            </button>
+            {record.shareDeclined ? (
+              <button type="button" onClick={() => setMode("idle")} disabled={busy} className="btn btn-secondary">
+                やめる
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  play("tap");
+                  save({ shareDeclined: true });
+                }}
+                disabled={busy}
+                className="btn btn-secondary"
+              >
+                この端末にのみ保存
+              </button>
+            )}
+          </div>
+          {errorLine}
+        </div>
+      </section>
     );
   }
 
@@ -346,10 +412,15 @@ export function ReportView() {
   const clearance = staff?.clearance;
   const router = useRouter();
   const [record, setRecord] = useState<ContainmentRecord | null | undefined>(undefined);
+  const [photos, setPhotos] = useState<RecordPhotos | null | undefined>(undefined);
+  const [loadError, setLoadError] = useState(false);
   // 撮影した直後は、保存先を経由しないメモリ上の画像を使う(upload-cache.ts を参照)
-  const photoBlob = record ? (freshFiltered(record.id) ?? record.photoFiltered) : undefined;
-  const photoUrl = useObjectUrl(photoBlob);
-  const [exporting, setExporting] = useState(false);
+  const photoBlob = record ? (freshFiltered(record.id) ?? photos?.photoFiltered) : undefined;
+  const photo = useObjectUrlState(photoBlob);
+  // 画像を読み出せなかったときも、報告書は表示する(画像の欄は「表示できません」になる)
+  const photoFailed = photo.status === "failed" || photos === null;
+  const photoUrl = photo.url || (photoFailed ? null : undefined);
+  const [exportState, setExportState] = useState<ExportState>("idle");
   const documentRef = useRef<HTMLElement>(null);
 
   // 記録を読み込み、未生成なら照会を始める。照会の進み具合はイベントで受け取る
@@ -358,7 +429,14 @@ export function ReportView() {
     let cancelled = false;
 
     const load = async (startIfNeeded: boolean) => {
-      const found = await getRecord(id);
+      let found: ContainmentRecord | undefined;
+      try {
+        found = await getRecord(id);
+      } catch (error) {
+        console.error("[report] 記録を読み込めませんでした", error);
+        if (!cancelled) setLoadError(true);
+        return;
+      }
       if (cancelled) return;
       setRecord(found ?? null);
       if (!startIfNeeded || !found || found.status !== "pending" || inFlight.has(found.id)) return;
@@ -368,21 +446,24 @@ export function ReportView() {
           status: "error",
           error: { code: "interrupted", message: "照会が中断されました。再照会してください。" },
         });
-        if (!cancelled) setRecord((await getRecord(id)) ?? null);
         return;
       }
       // 初回、またはページの読み込み直しなどで結果を受け取れなかったとき(1回だけ自動で再照会する)
       runQuery(found);
     };
 
+    getPhotos(id)
+      .then((found) => !cancelled && setPhotos(found ?? null))
+      .catch(() => !cancelled && setPhotos(null));
+
     const onChange = (event: Event) => {
       if ((event as CustomEvent<string>).detail === id) load(false);
     };
-    window.addEventListener(RECORD_EVENT, onChange);
+    window.addEventListener(RECORDS_EVENT, onChange);
     load(true);
     return () => {
       cancelled = true;
-      window.removeEventListener(RECORD_EVENT, onChange);
+      window.removeEventListener(RECORDS_EVENT, onChange);
     };
   }, [clearance, id]);
 
@@ -396,25 +477,41 @@ export function ReportView() {
 
   async function onExport() {
     if (!documentRef.current || !record?.itemNumber) return;
-    setExporting(true);
+    setExportState("busy");
     try {
-      await exportImage(documentRef.current, `${record.itemNumber}.png`, "#e9e6dc");
-    } catch {
-      // 共有を取り消したときなど。何もしない
-    } finally {
-      setExporting(false);
+      setExportState(exportOutcome(await exportImage(documentRef.current, `${record.itemNumber}.png`, "#ece8dc")));
+    } catch (error) {
+      console.error("[report] 画像を書き出せませんでした", error);
+      setExportState("error");
     }
   }
 
   async function onDiscard() {
     if (!record) return;
     await deleteRecord(record.id);
+    forgetAll(record.id);
     router.replace("/scan");
+  }
+
+  if (loadError) {
+    return (
+      <TerminalShell staff={staff} screen={{ id: "OBS-0210", name: "報告書" }}>
+        <div className="space-y-4 text-sm leading-7">
+          <p className="text-danger">端末の記録を読み込めませんでした。</p>
+          <p className="text-muted">ブラウザの保存領域に問題がある可能性があります。ページを読み込み直してください。</p>
+          <Link href="/archive" className="text-accent underline">
+            収容記録の一覧へ
+          </Link>
+        </div>
+      </TerminalShell>
+    );
   }
 
   if (!clearance || record === undefined) {
     return <p className="px-4 py-12 text-sm text-muted">財団データベースに照会中 …</p>;
   }
+
+  const unauthorized = record?.error?.code === "unauthorized";
 
   return (
     <TerminalShell staff={staff} screen={{ id: "OBS-0210", name: "報告書" }}>
@@ -428,23 +525,25 @@ export function ReportView() {
         </div>
       )}
 
-      {record?.status === "pending" && photoUrl && <QueryLog startedAt={record.requestedAt ?? record.createdAt} photoUrl={photoUrl} />}
+      {record?.status === "pending" && photoUrl !== undefined && (
+        <QueryLog startedAt={record.requestedAt ?? record.createdAt} photoUrl={photoUrl} />
+      )}
 
       {record?.status === "error" && (
         <div className="space-y-4 text-sm leading-7">
           <p className="text-danger">照会に失敗しました</p>
           <p className="text-muted">{record.error?.message}</p>
+          {unauthorized && <p className="text-muted">職員認証の有効期限が切れています。認証し直したあと、この記録を収容記録の一覧から開いて再照会できます。</p>}
           <p className="font-mono text-[10px] text-muted">エラーコード: {record.error?.code ?? "unknown"}</p>
           <div className="flex flex-wrap gap-3">
-            {record.error?.code !== "unauthorized" && (
-              <button
-                type="button"
-                onClick={() => runQuery(record)}
-                className="btn btn-primary"
-              >
-                再照会する
-              </button>
+            {unauthorized && (
+              <Link href="/" className="btn btn-primary">
+                職員認証をやり直す
+              </Link>
             )}
+            <button type="button" onClick={() => runQuery(record)} className={unauthorized ? "btn btn-secondary" : "btn btn-primary"}>
+              再照会する
+            </button>
             <button type="button" onClick={onDiscard} className="btn btn-secondary">
               記録を破棄する
             </button>
@@ -452,7 +551,7 @@ export function ReportView() {
         </div>
       )}
 
-      {record?.status === "done" && record.report && record.itemNumber && photoUrl && (
+      {record?.status === "done" && record.report && record.itemNumber && photoUrl !== undefined && (
         <div>
           <ReportDocument
             ref={documentRef}
@@ -465,18 +564,14 @@ export function ReportView() {
           <RatingBox recordId={record.id} />
           <SharePanel record={record} onChange={(patch) => setRecord({ ...record, ...patch })} />
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
-            <button
-              type="button"
-              onClick={onExport}
-              disabled={exporting}
-              className="btn btn-primary"
-            >
-              {exporting ? "書き出し中 …" : "報告書を画像で保存"}
+            <button type="button" onClick={onExport} disabled={exportState === "busy"} className="btn btn-primary">
+              {exportState === "busy" ? "書き出し中 …" : "報告書を画像で保存"}
             </button>
             <Link href="/scan" className="btn btn-secondary">
               次の対象を観測する
             </Link>
           </div>
+          <ExportStatus state={exportState} subject="報告書" />
         </div>
       )}
     </TerminalShell>

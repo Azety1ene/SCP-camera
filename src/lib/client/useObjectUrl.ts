@@ -13,7 +13,14 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * 画面が隠れたあと再表示されたとき(Next.js は離れた画面を保持する)も、作り直した URL を使う。
  */
 export function useObjectUrl(blob: Blob | undefined): string {
-  const [state, setState] = useState<{ blob: Blob | undefined; url: string }>({ blob: undefined, url: "" });
+  return useObjectUrlState(blob).url;
+}
+
+export type ObjectUrlState = { url: string; status: "idle" | "loading" | "ready" | "failed" };
+
+/** useObjectUrl と同じ。読み直しても読めなかったときは status が failed になる */
+export function useObjectUrlState(blob: Blob | undefined): ObjectUrlState {
+  const [state, setState] = useState<{ blob: Blob | undefined; url: string; failed: boolean }>({ blob: undefined, url: "", failed: false });
 
   useEffect(() => {
     if (!blob) return;
@@ -25,13 +32,14 @@ export function useObjectUrl(blob: Blob | undefined): string {
           const bytes = await blob.arrayBuffer();
           if (cancelled) return;
           url = URL.createObjectURL(new Blob([bytes], { type: blob.type || "image/jpeg" }));
-          setState({ blob, url });
+          setState({ blob, url, failed: false });
           return;
         } catch (error) {
           console.warn("[image] 画像を読み出せないので読み直します", error);
           await wait(400 * (attempt + 1));
         }
       }
+      if (!cancelled) setState({ blob, url: "", failed: true });
     })();
     return () => {
       cancelled = true;
@@ -39,5 +47,7 @@ export function useObjectUrl(blob: Blob | undefined): string {
     };
   }, [blob]);
 
-  return blob && state.blob === blob ? state.url : "";
+  if (!blob) return { url: "", status: "idle" };
+  if (state.blob !== blob) return { url: "", status: "loading" };
+  return state.failed ? { url: "", status: "failed" } : { url: state.url, status: "ready" };
 }

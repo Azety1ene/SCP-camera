@@ -146,6 +146,7 @@ export function unlockAudio() {
     wet.connect(room).connect(roomLevel).connect(tone);
 
     engine = { ctx, dry, wet, white: makeNoise(ctx, "white", 2), brown: makeNoise(ctx, "brown", 4) };
+    watchVisibility();
   }
   if (engine.ctx.state === "suspended") void engine.ctx.resume();
   if (humWanted && !hum) startHum();
@@ -438,6 +439,27 @@ export function startHum() {
 function stopHumNow() {
   hum?.stop();
   hum = null;
+}
+
+/**
+ * タブを離れたら環境音を止めて音の処理も休ませ、戻ってきたら再開する(バックグラウンドで鳴り続けないように)。
+ * humWanted は残しておくので、観測画面に戻れば環境音もまた鳴る
+ */
+function watchVisibility() {
+  document.addEventListener("visibilitychange", () => {
+    if (!engine) return;
+    if (document.hidden) {
+      stopHumNow();
+      void engine.ctx.suspend().catch(() => {});
+    } else {
+      void engine.ctx
+        .resume()
+        .then(() => {
+          if (humWanted && !hum) startHum();
+        })
+        .catch(() => {});
+    }
+  });
 }
 
 export function stopHum() {

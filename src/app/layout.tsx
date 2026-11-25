@@ -34,7 +34,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d1012",
+  themeColor: "#121210",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -47,8 +47,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         <AudioUnlocker />
         <AmbientEffects />
-        {/* 画面全体にかかる走査線とちらつき */}
-        <div aria-hidden className="crt-overlay" />
       </body>
     </html>
   );

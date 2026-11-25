@@ -64,21 +64,28 @@ export async function toCctvJpeg(source: HTMLCanvasElement, options: { camId: st
   const px = image.data;
   const cx = width / 2;
   const cy = height / 2;
-  const maxDist = Math.hypot(cx, cy);
+  const maxDistSq = cx * cx + cy * cy;
+
+  // 周辺減光: 中心からの距離の2乗(0〜1)ごとの明るさを先に表にしておく。
+  // 画素ごとに平方根や累乗を計算すると、スマホでシャッター直後に固まるため
+  const VIGNETTE_STEPS = 1024;
+  const vignetteTable = new Float32Array(VIGNETTE_STEPS + 1);
+  for (let i = 0; i <= VIGNETTE_STEPS; i++) vignetteTable[i] = 1 - Math.pow(i / VIGNETTE_STEPS, 1.1) * 0.55; // (d/max)^2.2 = (d²/max²)^1.1
 
   for (let y = 0; y < height; y++) {
     // 走査線:3行ごとに少し暗くする
     const scan = y % 3 === 0 ? 0.82 : 1;
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
+    const dySq = (y - cy) * (y - cy);
+    let i = y * width * 4;
+    for (let x = 0; x < width; x++, i += 4) {
       const luma = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
       // コントラストを上げて、黒を少し浮かせる
       let v = (luma - 128) * 1.25 + 128 + 10;
-      // 周辺減光
-      const vignette = 1 - Math.pow(Math.hypot(x - cx, y - cy) / maxDist, 2.2) * 0.55;
+      const dx = x - cx;
+      const vignette = vignetteTable[((dx * dx + dySq) / maxDistSq) * VIGNETTE_STEPS | 0];
       // ノイズ
       v = (v + (Math.random() - 0.5) * 38) * scan * vignette;
-      v = Math.max(0, Math.min(255, v));
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
       // 緑がかった単色
       px[i] = v * 0.78;
       px[i + 1] = v * 0.95;

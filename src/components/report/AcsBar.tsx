@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { DISRUPTION_CLASSES, RISK_CLASSES, type StoredReport } from "@/lib/report/schema.ts";
 
 /**
@@ -64,14 +64,16 @@ function DisruptionIcon({ level, color }: { level: number; color: string }) {
 /** 段階が上がるほど、三角の中が塗られていく */
 function RiskIcon({ level, color }: { level: number; color: string }) {
   const fill = (level + 1) / 5;
+  // 同じ画面に報告書が2つ以上あっても、切り抜きの ID が重ならないようにする
+  const clipId = `risk-${useId().replace(/:/g, "")}`;
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0" aria-hidden>
       <defs>
-        <clipPath id={`risk-${level}`}>
+        <clipPath id={clipId}>
           <rect x="0" y={22 - 18 * fill} width="24" height={18 * fill + 2} />
         </clipPath>
       </defs>
-      <path d="M12 3 L22 21 L2 21 Z" fill={color} clipPath={`url(#risk-${level})`} opacity="0.85" />
+      <path d="M12 3 L22 21 L2 21 Z" fill={color} clipPath={`url(#${clipId})`} opacity="0.85" />
       <path d="M12 3 L22 21 L2 21 Z" fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
@@ -101,12 +103,12 @@ export function AcsBar({ itemNumber, report }: { itemNumber: string; report: Sto
   const risk = report.riskClass ? RISK_CLASSES.indexOf(report.riskClass) : -1;
 
   return (
-    <div className="mt-4 border border-ink/50">
-      <div className="flex items-center justify-between border-b border-ink/50 px-2 py-1 font-mono text-[10px] tracking-wider text-ink/80">
-        <span>{itemNumber}</span>
-        <span>異常分類</span>
+    <div className="mt-4 border border-ink">
+      <div className="flex items-center justify-between border-b border-ink bg-ink/[0.06] px-2.5 py-1 font-mono text-[10px] tracking-wider text-ink">
+        <span className="font-bold">{itemNumber}</span>
+        <span>異常分類システム</span>
       </div>
-      <div className="grid grid-cols-3 divide-x divide-ink/25">
+      <div className="grid grid-cols-3 divide-x divide-ink/40">
         <Cell
           label="収容"
           value={report.objectClass}

@@ -1,6 +1,7 @@
 import { FinishReason, ThinkingLevel } from "@google/genai";
 import { generateContent } from "../gemini.ts";
 import { buildUserPrompt, SYSTEM_INSTRUCTION } from "./prompt.ts";
+import { withRedactionLevels } from "./redaction.ts";
 import { reportJsonSchema, reportSchema, type GeneratedReport } from "./schema.ts";
 import { planStory, type StoryPlan } from "./tones.ts";
 
@@ -75,7 +76,8 @@ export async function generateReport(
   return {
     itemNumber,
     plan: { toneId: plan.tone.id, toneName: plan.tone.name },
-    report: parsed.data,
+    // レベルを書き忘れた黒塗りがあれば、出現順で割り振っておく(保存・共有される本文はすべてレベル付きにする)
+    report: withRedactionLevels(parsed.data),
     usage: {
       thoughtsTokens: response.usageMetadata?.thoughtsTokenCount,
       outputTokens: response.usageMetadata?.candidatesTokenCount,

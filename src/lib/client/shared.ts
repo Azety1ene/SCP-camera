@@ -9,6 +9,7 @@ export type SharedSummary = {
   itemNumber: string;
   title: string;
   objectClass: string;
+  /** 添付画像(/api/shared/[id]/image。職員認証済みの Cookie で読める) */
   imageUrl: string;
   observatory: string | null;
   createdAt: string;
@@ -41,8 +42,10 @@ async function call<T>(input: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
-export async function fetchSharedList(): Promise<SharedSummary[]> {
-  return (await call<{ items: SharedSummary[] }>("/api/shared", { cache: "no-store" })).items;
+/** 新しい順に30件ずつ。続きを読むときは、前の応答の next を渡す */
+export async function fetchSharedList(before?: string | null): Promise<{ items: SharedSummary[]; next: string | null }> {
+  const query = before ? `?before=${encodeURIComponent(before)}` : "";
+  return call<{ items: SharedSummary[]; next: string | null }>(`/api/shared${query}`, { cache: "no-store" });
 }
 
 export async function fetchShared(id: string): Promise<SharedReport> {
@@ -88,13 +91,34 @@ export async function toShareImage(source: Blob): Promise<Blob> {
   return jpeg;
 }
 
-/** 報告書を財団データベースに登録し、登録した ID と取り下げ用の鍵を返す */
-export async function shareReport(token: string, photo: Blob, observatory: string): Promise<{ id: string; deleteKey: string }> {
-  const image = await toShareImage(photo);
+/**
+ * 報告書を財団データベースに登録し、登録した ID と取り下げ用の鍵を返す。
+ * image には、照会のときに送った添付画像(toShareImage の結果)をそのまま渡す。作り直すと指紋が合わず登録できない
+ */
+export async function shareReport(token: string, image: Blob, observatory: string): Promise<{ id: string; deleteKey: string }> {
   const form = new FormData();
   form.append("token", token);
   form.append("image", image, image.type === "image/webp" ? "attachment.webp" : "attachment.jpg");
   form.append("observatory", observatory);
   const { id, deleteKey } = await call<{ id: string; deleteKey: string }>("/api/shared", { method: "POST", body: form });
   return { id, deleteKey };
+}
+
+/** 登録票の有効期限(サーバーの token.ts と同じ) */
+const TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * 登録票の中身を、署名は確かめずに読む(画面の案内に使うだけ。確かめるのはサーバー)。
+ * legacy は、画像の指紋が入る前に発行された登録票で、登録できない
+ */
+export function tokenStatus(token: string, now = Date.now()): "ok" | "expired" | "legacy" {
+  try {
+    const payload = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    const json = new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0)));
+    const value = JSON.parse(json) as { imageHash?: unknown; issuedAt?: unknown };
+    if (typeof value.imageHash !== "string" || typeof value.issuedAt !== "number") return "legacy";
+    return now - value.issuedAt > TOKEN_MAX_AGE_MS ? "expired" : "ok";
+  } catch {
+    return "legacy";
+  }
 }

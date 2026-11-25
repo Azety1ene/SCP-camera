@@ -1,20 +1,19 @@
-import { del } from "@vercel/blob";
 import { cookies } from "next/headers";
 import { tokenHash } from "@/lib/report/token.ts";
+import { deleteSharedImage } from "@/lib/server/blob.ts";
 import { deleteShared, getShared } from "@/lib/server/shared.ts";
+import { isSharedId } from "@/lib/shared-id.ts";
 import { decodeSession, SESSION_COOKIE } from "@/lib/session.ts";
 
 function errorResponse(status: number, code: string, message: string) {
   return Response.json({ error: { code, message } }, { status });
 }
 
-const isId = (id: string) => /^[0-9a-f-]{36}$/.test(id);
-
 /** GET /api/shared/:id  登録された報告書の全文。O5 だけが読める部分は、表示側で隠す */
 export async function GET(_request: Request, ctx: RouteContext<"/api/shared/[id]">) {
   if (!decodeSession((await cookies()).get(SESSION_COOKIE)?.value)) return errorResponse(401, "unauthorized", "職員認証が必要です。");
   const { id } = await ctx.params;
-  if (!isId(id)) return errorResponse(404, "not_found", "該当する記録は存在しません。");
+  if (!isSharedId(id)) return errorResponse(404, "not_found", "該当する記録は存在しません。");
   try {
     const item = await getShared(id);
     return item ? Response.json({ item }) : errorResponse(404, "not_found", "該当する記録は存在しません。");
@@ -34,15 +33,15 @@ export async function DELETE(request: Request, ctx: RouteContext<"/api/shared/[i
   const deleteKey = request.headers.get("x-delete-key");
   if (session.clearance !== "O5" && !deleteKey) return errorResponse(403, "forbidden", "この操作には O5 権限が必要です。");
   const { id } = await ctx.params;
-  if (!isId(id)) return errorResponse(404, "not_found", "該当する記録は存在しません。");
+  if (!isSharedId(id)) return errorResponse(404, "not_found", "該当する記録は存在しません。");
   try {
-    const imageUrl = await deleteShared(id, session.clearance === "O5" ? undefined : tokenHash(deleteKey!));
-    if (!imageUrl) {
+    const image = await deleteShared(id, session.clearance === "O5" ? undefined : tokenHash(deleteKey!));
+    if (!image) {
       return session.clearance === "O5"
         ? errorResponse(404, "not_found", "該当する記録は存在しません。")
         : errorResponse(403, "forbidden", "この記録を取り下げる権限がありません。");
     }
-    await del(imageUrl).catch((error) => console.error("[shared] blob delete failed:", error));
+    await deleteSharedImage(image.url, image.access).catch((error) => console.error("[shared] blob delete failed:", error));
     return Response.json({ ok: true });
   } catch (error) {
     console.error("[shared] delete failed:", error);

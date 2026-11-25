@@ -3,15 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/copy-mediapipe.mjs && next dev",
+    "build": "node scripts/copy-mediapipe.mjs && next build",
     "start": "next start",
     "lint": "eslint",
-    "dev:phone": "node scripts/dev-phone.mjs"
+    "test": "vitest run",
+    "dev:phone": "node scripts/copy-mediapipe.mjs && node scripts/dev-phone.mjs"
   },
   "dependencies": {
     "@google/genai": "^3.4.0",
-    "@mediapipe/tasks-vision": "^1.2.3",
+    "@mediapipe/tasks-vision": "1.2.3",
     "@neondatabase/serverless": "^1.2.1",
     "@vercel/blob": "^2.9.0",
     "html-to-image": "^1.11.13",
@@ -30,7 +31,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "3.2.4"
   },
   "packageManager": "pnpm@12.4.2"
 }

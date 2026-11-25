@@ -39,12 +39,15 @@ export function encodeSession(session: Session): string {
 
 export function decodeSession(value: string | undefined): Session | null {
   if (!value) return null;
-  const [payload, signature] = value.split(".");
+  const parts = value.split(".");
+  if (parts.length !== 2) return null;
+  const [payload, signature] = parts;
   if (!payload || !signature || !safeEqual(sign(payload), signature)) return null;
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString()) as Session;
     if (session.clearance !== "L2" && session.clearance !== "O5") return null;
-    if (Date.now() - session.issuedAt > SESSION_MAX_AGE * 1000) return null;
+    // issuedAt が数値でないと、期限の比較が NaN になって素通りするので先に弾く
+    if (typeof session.issuedAt !== "number" || Date.now() - session.issuedAt > SESSION_MAX_AGE * 1000) return null;
     return session;
   } catch {
     return null;

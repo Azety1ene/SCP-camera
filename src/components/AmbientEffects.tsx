@@ -8,7 +8,8 @@ const COPY_NOTICE = "\n\n──\n[機密情報の端末外への持ち出しは�
 /**
  * サイト全体の小さな仕掛け。
  * - タブを離れると、タブのタイトルが「観測を継続してください」に変わる
- * - 文章をコピーすると、末尾に持ち出しの警告が付く
+ * - 報告書や書庫の文書など、機密文書の本文(data-classified を付けた要素の中)をコピーすると、末尾に持ち出しの警告が付く。
+ *   エラーコードやアイテム番号など、それ以外の場所のコピーは邪魔しない
  */
 export function AmbientEffects() {
   useEffect(() => {
@@ -23,10 +24,13 @@ export function AmbientEffects() {
     };
 
     const onCopy = (event: ClipboardEvent) => {
-      const selection = window.getSelection()?.toString();
-      // 入力欄でのコピー(合言葉など)は邪魔しない
-      const target = event.target as HTMLElement | null;
-      if (!selection || !event.clipboardData || target?.closest("input, textarea")) return;
+      const selected = window.getSelection();
+      const selection = selected?.toString();
+      if (!selected || !selection || !event.clipboardData || selected.rangeCount === 0) return;
+      // 選んだ範囲が機密文書の本文に掛かっているときだけ
+      const range = selected.getRangeAt(0);
+      const inClassified = [...document.querySelectorAll("[data-classified]")].some((el) => range.intersectsNode(el));
+      if (!inClassified) return;
       event.clipboardData.setData("text/plain", selection + COPY_NOTICE);
       event.preventDefault();
     };

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CLEARANCE_LABEL, fetchClearance, type Clearance, type ServerClearance } from "@/lib/client/session.ts";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { CLEARANCE_LABEL, fetchClearance, rememberClearance, type Clearance, type ServerClearance } from "@/lib/client/session.ts";
 import { resolveClearance, setClearanceOverride } from "@/lib/client/progress.ts";
 import { play, unlockAudio } from "@/lib/client/sound.ts";
 import { SoundToggle } from "@/components/SoundToggle.tsx";
+import { Emblem } from "@/components/Icons.tsx";
 
 type Tone = "muted" | "accent" | "warn" | "danger";
 
@@ -28,7 +29,7 @@ type BootStep =
   | { kind: "typed"; text: string; tone?: Tone };
 
 const BOOT: BootStep[] = [
-  { kind: "plain", text: "SCP FOUNDATION / 日本支部 統合観測ネットワーク", tone: "accent" },
+  { kind: "plain", text: "SCP FOUNDATION JAPAN / 統合観測ネットワーク 端末OS v2.4", tone: "accent" },
   { kind: "status", label: "端末起動", status: "完了" },
   { kind: "status", label: "暗号化回線の確立", status: "完了" },
   { kind: "status", label: "ミーム汚染フィルタ", status: "有効", statusTone: "accent" },
@@ -109,8 +110,10 @@ function writeFailures(value: number) {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 起動シーケンスを最後まで見たことがあるか。2回目以降は「スキップ」ボタンを出す */
+/** 起動シーケンスを最後まで見たことがあるか。2回目以降はスキップの案内を出す */
 const BOOT_SEEN_KEY = "scp-boot-seen";
+
+const subscribeNothing = () => () => {};
 
 function readBootSeen(): boolean {
   try {
@@ -130,7 +133,7 @@ function writeBootSeen() {
 
 const TONE_CLASS: Record<NonNullable<Line["tone"]>, string> = {
   muted: "text-muted",
-  accent: "text-accent glow",
+  accent: "text-accent",
   warn: "text-warn",
   danger: "text-danger",
 };
@@ -147,11 +150,9 @@ export function AuthTerminal() {
   const [lockedFor, setLockedFor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  /** 画面をタップするかキーを押すと、起動シーケンスを飛ばす */
   const skipRef = useRef(false);
-  /** 2回目以降の起動か。そのときだけ「スキップ」ボタンを出す */
-  const [returning] = useState(readBootSeen);
-  /** 認証後の演出を飛ばすか(2回目以降のみ) */
+  // サーバーでは localStorage を読めないので false として描き、ブラウザで読み直す
+  const returning = useSyncExternalStore(subscribeNothing, readBootSeen, () => false);
   const skipOutroRef = useRef(false);
   const [outro, setOutro] = useState(false);
 
@@ -166,17 +167,16 @@ export function AuthTerminal() {
     const pause = (ms: number) => (skipRef.current || cancelled ? Promise.resolve() : wait(ms));
 
     (async () => {
-      // 認証済みなら、撮影件数による昇格を反映したクリアランスを出す
       const clearancePromise = fetchClearance().then((server) => (server ? resolveClearance(server) : null));
-      await pause(300);
+      await pause(280);
       for (const step of BOOT) {
         if (cancelled || skipRef.current) break;
         if (step.kind === "plain") {
           push({ text: step.text, tone: step.tone });
-          await pause(450);
+          await pause(400);
         } else if (step.kind === "blank") {
           push({ text: "" });
-          await pause(250);
+          await pause(220);
         } else if (step.kind === "status") {
           push({ text: `${step.label} `, tone: "muted" });
           for (let i = 0; i < dotsFor(step.label); i++) {
@@ -184,18 +184,17 @@ export function AuthTerminal() {
             await pause(14);
             updateLast((line) => ({ text: `${line.text}.` }));
           }
-          // 処理しているように、結果が出るまで少し待つ
-          await pause(randomBetween(350, 900));
+          await pause(randomBetween(320, 820));
           updateLast((line) => ({ text: `${line.text} `, status: step.status, statusTone: step.statusTone }));
           if (!skipRef.current) play("ok");
-          await pause(120);
+          await pause(110);
         } else {
           push({ text: "", tone: step.tone, typing: true });
           for (const ch of step.text) {
             if (skipRef.current) break;
             updateLast((line) => ({ text: line.text + ch }));
             if (ch.trim()) play("key");
-            await pause("。、".includes(ch) ? 220 : randomBetween(28, 60));
+            await pause("。、".includes(ch) ? 200 : randomBetween(26, 55));
           }
           updateLast(() => ({ typing: false }));
         }
@@ -214,8 +213,7 @@ export function AuthTerminal() {
     };
   }, [powered]);
 
-  // 2回目以降の起動だけ、画面を2回タップすると(PCでは Enter / Space / Esc でも)演出を飛ばす。
-  // 起動ログと、認証後の「観測端末を起動します …」までの待ち時間の両方に効く。初回は最後まで見せる
+  // 2回目以降の起動だけ、画面を2回タップすると(PCでは Enter / Space / Esc でも)演出を飛ばす
   useEffect(() => {
     if (!powered || !returning) return;
     let lastTap = 0;
@@ -247,7 +245,6 @@ export function AuthTerminal() {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [lines]);
 
-  // ロック中のカウントダウン
   useEffect(() => {
     if (lockedFor <= 0) return;
     const timer = setTimeout(() => setLockedFor((s) => s - 1), 1000);
@@ -262,13 +259,29 @@ export function AuthTerminal() {
 
     let server: ServerClearance | null = null;
     try {
-      const res = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
+      const [res] = await Promise.all([
+        fetch("/api/auth", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code }),
+        }),
+        wait(700),
+      ]);
+      if (res.status === 429) {
+        const retryAfter = Math.min(600, Math.max(1, Number(res.headers.get("retry-after")) || LOCK_SECONDS));
+        setCode("");
+        push(
+          { text: "照合要求が上限を超えました。", tone: "danger" },
+          { text: `セキュリティ規定により、この回線からの認証を約${Math.ceil(retryAfter / 60)}分間停止します。`, tone: "warn" },
+        );
+        play("deny");
+        setLockedFor(retryAfter);
+        setBusy(false);
+        return;
+      }
       const body = (await res.json()) as { ok: boolean; clearance?: ServerClearance };
       server = body.ok && body.clearance ? body.clearance : null;
+      if (server) rememberClearance(server);
     } catch {
       push({ text: "通信エラー: 財団回線に接続できません。", tone: "danger" });
       setBusy(false);
@@ -276,7 +289,6 @@ export function AuthTerminal() {
     }
 
     setCode("");
-    // 認証し直したら、O5 の表示切り替えは解除する
     if (server) setClearanceOverride(null);
     const clearance: Clearance | null = server ? await resolveClearance(server) : null;
     if (!clearance) {
@@ -313,83 +325,134 @@ export function AuthTerminal() {
     router.push("/portal");
   }
 
+  // 共通の上部機器バー
+  const topBar = (screenId: string, screenName: string) => (
+    <header className="border-b-2 border-line-strong bg-panel pt-[env(safe-area-inset-top)]">
+      <div className="mx-auto flex h-11 max-w-2xl items-center justify-between gap-3 border-x border-line px-4">
+        <div className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted">
+          <span className="border border-line-strong bg-sunken px-1.5 py-0.5 text-[10px] text-foreground">{screenId}</span>
+          <span className="truncate">{screenName}</span>
+        </div>
+        <SoundToggle />
+      </div>
+    </header>
+  );
+
   if (!powered) {
     return (
-      <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-8 px-4 py-16 text-center font-mono text-sm leading-7">
-        <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
-        <div className="space-y-1">
-          <p className="text-xs tracking-[0.3em] text-muted">SECURE ・ CONTAIN ・ PROTECT</p>
-          <p className="text-accent glow">SCP財団 統合観測端末</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            unlockAudio();
-            play("power");
-            setPowered(true);
-          }}
-          className="btn btn-primary btn-lg min-w-64 font-mono tracking-widest"
-        >
-          <span className="cursor">[ 端末を起動する ]</span>
-        </button>
-        <p className="text-xs text-muted">この端末は音が出ます。右上で切り替えられます。</p>
-      </main>
+      <div className="flex min-h-dvh flex-1 flex-col bg-background">
+        {topBar("SYS-0000", "電源待機")}
+        <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center border-x border-line/60 px-4 py-10 sm:px-8">
+          {/* 支給端末の銘板・起動前確認票 */}
+          <section className="border-2 border-line-strong bg-panel">
+            <div className="flex items-center justify-between border-b border-line-strong bg-sunken px-4 py-2.5 font-mono text-[11px] text-muted">
+              <span>SCP FOUNDATION / JAPAN BRANCH</span>
+              <span>型式 81-OT</span>
+            </div>
+            <div className="space-y-6 p-5 sm:p-7">
+              <div className="flex items-start gap-4 border-b border-line pb-5">
+                <Emblem className="mt-0.5 h-10 w-10 shrink-0 text-foreground" />
+                <div className="min-w-0">
+                  <p className="font-mono text-[11px] text-muted">記録・情報保安管理局 支給機材</p>
+                  <h1 className="mt-1 font-doc text-xl font-bold leading-snug text-foreground sm:text-2xl">
+                    統合観測ネットワーク 端末
+                  </h1>
+                </div>
+              </div>
+
+              <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 border border-line bg-sunken px-3.5 py-3 font-mono text-xs">
+                <dt className="text-muted">回線状態</dt>
+                <dd className="text-foreground">待機中(未通電)</dd>
+                <dt className="text-muted">音声出力</dt>
+                <dd className="text-foreground">有効(右上のスイッチで切替可)</dd>
+                <dt className="text-muted">利用区分</dt>
+                <dd className="text-warn">財団職員専用 ── 認証コード必須</dd>
+              </dl>
+
+              <p className="text-xs leading-6 text-muted">
+                本端末は財団日本支部の観測記録業務に支給された専用機器です。起動後の操作はすべて記録されます。
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  unlockAudio();
+                  play("power");
+                  setPowered(true);
+                }}
+                className="btn btn-primary btn-lg w-full font-mono"
+              >
+                端末を起動する
+              </button>
+            </div>
+            <div className="flex items-center justify-between border-t border-line bg-sunken px-4 py-2 font-mono text-[11px] text-muted">
+              <span>確保・収容・保護</span>
+              <Link href="/about" className="underline hover:text-foreground">
+                規約・ライセンス
+              </Link>
+            </div>
+          </section>
+        </main>
+      </div>
     );
   }
 
   return (
-    <main className="relative mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-[calc(max(1rem,env(safe-area-inset-top))+3.5rem)] pb-10 font-mono text-sm leading-7">
-      <SoundToggle className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] text-xs text-muted" />
-      {returning && (!booted || outro) && (
-        <p className="pointer-events-none fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-4 z-10 font-mono text-xs text-muted">
-          画面を2回タップでスキップ
-        </p>
-      )}
-      <div className="flex-1 space-y-0.5">
-        {lines.map((line, index) => (
-          <p
-            key={index}
-            className={`glitch-in whitespace-pre-wrap ${line.tone ? TONE_CLASS[line.tone] : ""} ${line.typing ? "cursor" : ""}`}
-          >
-            {line.text || " "}
-            {line.status && <span className={`glitch-in ${line.statusTone ? TONE_CLASS[line.statusTone] : "text-foreground"}`}>{line.status}</span>}
+    <div className="flex min-h-dvh flex-1 flex-col bg-background">
+      {topBar("SYS-0010", "職員認証")}
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col border-x border-line/60 px-4 py-6 sm:px-6">
+        {returning && (!booted || outro) && (
+          <p className="pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-10 border border-line-strong bg-panel px-2.5 py-1 font-mono text-[11px] text-muted">
+            画面を2回タップでスキップ
           </p>
-        ))}
-
-        {booted && existing && (
-          <div className="glitch-in mt-6 space-y-4">
-            <p className="text-accent glow">
-              職員認証済みの端末です(クリアランス {CLEARANCE_LABEL[existing]})。
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  play("tap");
-                  router.push("/portal");
-                }}
-                className="btn btn-primary"
-              >
-                端末に入る
-              </button>
-              <button
-                type="button"
-                onClick={() => setExisting(null)}
-                className="btn btn-secondary"
-              >
-                別のコードで認証する
-              </button>
-            </div>
-          </div>
         )}
 
-        {booted && !existing && (
-          <form onSubmit={onSubmit} className="glitch-in mt-6">
-            <label htmlFor="code" className="block text-muted">
-              職員認証コードを入力してください
-            </label>
-            <div className="mt-1 flex items-center gap-2 border-b border-line focus-within:border-accent">
-              <span className="text-accent">&gt;</span>
+        {/* コンソール出力枠 */}
+        <div className="flex-1 border border-line-strong bg-sunken p-4 font-mono text-[13px] leading-7 sm:p-5">
+          <div className="space-y-0.5">
+            {lines.map((line, index) => (
+              <p
+                key={index}
+                className={`whitespace-pre-wrap break-words ${line.tone ? TONE_CLASS[line.tone] : ""} ${line.typing ? "cursor" : ""}`}
+              >
+                {line.text || " "}
+                {line.status && <span className={line.statusTone ? TONE_CLASS[line.statusTone] : "text-foreground"}>{line.status}</span>}
+              </p>
+            ))}
+          </div>
+
+          {booted && existing && (
+            <div className="mt-6 border-t border-line pt-5">
+              <p className="text-accent">
+                職員認証済みの端末です(クリアランス {CLEARANCE_LABEL[existing]})。
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    play("tap");
+                    router.push("/portal");
+                  }}
+                  className="btn btn-primary"
+                >
+                  業務画面に入る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExisting(null)}
+                  className="btn btn-secondary"
+                >
+                  別のコードで認証する
+                </button>
+              </div>
+            </div>
+          )}
+
+          {booted && !existing && (
+            <form onSubmit={onSubmit} className="mt-6 border-t border-line pt-5 font-ui">
+              <label htmlFor="code" className="block font-mono text-xs text-foreground">
+                職員認証コード
+              </label>
               <input
                 ref={inputRef}
                 id="code"
@@ -400,28 +463,29 @@ export function AuthTerminal() {
                 value={code}
                 disabled={busy || lockedFor > 0}
                 onChange={(event) => setCode(event.target.value)}
-                className="w-full bg-transparent py-2 text-foreground outline-none placeholder:text-muted disabled:opacity-50"
-                placeholder={lockedFor > 0 ? `端末ロック中 ... ${lockedFor}` : ""}
+                className="field-input mt-2"
+                placeholder={lockedFor > 0 ? `端末ロック中 ... ${lockedFor}秒` : "認証コードを入力"}
                 enterKeyHint="go"
               />
-            </div>
-            <button
-              type="submit"
-              disabled={busy || lockedFor > 0 || !code.trim()}
-              className="btn btn-primary btn-lg mt-5 w-full"
-            >
-              {busy ? "照合中 …" : lockedFor > 0 ? `端末ロック中(${lockedFor})` : "認証する"}
-            </button>
-          </form>
-        )}
-        <div ref={endRef} />
-      </div>
+              <button
+                type="submit"
+                disabled={busy || lockedFor > 0 || !code.trim()}
+                className="btn btn-primary btn-lg mt-4 w-full"
+              >
+                {busy ? "照合中 …" : lockedFor > 0 ? `端末ロック中(${lockedFor}秒)` : "認証を実行する"}
+              </button>
+            </form>
+          )}
+          <div ref={endRef} />
+        </div>
 
-      <footer className="mt-10 text-xs text-muted">
-        <Link href="/about" className="underline hover:text-foreground">
-          規約・ライセンス
-        </Link>
-      </footer>
-    </main>
+        <footer className="mt-4 flex items-center justify-between font-mono text-[11px] text-muted">
+          <span>SCP財団 日本支部</span>
+          <Link href="/about" className="underline hover:text-foreground">
+            規約・ライセンス
+          </Link>
+        </footer>
+      </main>
+    </div>
   );
 }

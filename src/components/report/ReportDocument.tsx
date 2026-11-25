@@ -3,6 +3,7 @@ import type { StoredReport } from "@/lib/report/schema.ts";
 import { AcsBar, ApprovalBox, ClassifiedStamp } from "./AcsBar.tsx";
 import { CLEARANCE_LABEL, type Clearance } from "@/lib/client/session.ts";
 import { RichText } from "./RichText.tsx";
+import { withRedactionLevels } from "@/lib/report/redaction.ts";
 
 type Addendum = StoredReport["addenda"][number];
 
@@ -38,19 +39,22 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 export type ReportDocumentProps = {
   itemNumber: string;
   report: StoredReport;
-  photoUrl: string;
+  /** 添付資料の画像。null のときは「表示できません」の欄を出す */
+  photoUrl: string | null;
   clearance: Clearance;
   recordedAt: Date;
 };
 
 /** 紙の機密文書として表示する報告書。画像書き出しの対象にもなるので ref を受け取る */
 export const ReportDocument = forwardRef<HTMLElement, ReportDocumentProps>(function ReportDocument(
-  { itemNumber, report, photoUrl, clearance, recordedAt },
+  { itemNumber, report: original, photoUrl, clearance, recordedAt },
   ref,
 ) {
   const isO5 = clearance === "O5";
+  // レベルの付いていない黒塗り(仕組みを入れる前の記録)に、出現順でレベルを付ける
+  const report = withRedactionLevels(original);
   return (
-    <article ref={ref} className="relative bg-paper px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] text-ink shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_60px_rgba(0,0,0,0.6)] sm:px-10">
+    <article ref={ref} data-classified className="paper-sheet px-5 pb-10 pt-6 font-doc text-[15px] leading-[1.9] sm:px-10">
       {/* 文書の頭書き: 左に発行元と文書の情報、右に決裁欄(公文書の書式) */}
       <div className="flex items-start justify-between gap-4 border-b-2 border-ink pb-3">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[10.5px] leading-5 text-ink/80">
@@ -61,15 +65,14 @@ export const ReportDocument = forwardRef<HTMLElement, ReportDocumentProps>(funct
           <dt>作成</dt>
           <dd>{recordedAt.toLocaleDateString("ja-JP")}</dd>
           <dt>閲覧</dt>
-          <dd className={isO5 ? "font-bold text-[#a3241a]" : "font-bold"}>{CLEARANCE_LABEL[clearance]}</dd>
+          <dd className={isO5 ? "font-bold text-[#9e261d]" : "font-bold"}>{CLEARANCE_LABEL[clearance]}</dd>
         </dl>
         <ApprovalBox stamps={["観測", "記録", isO5 ? "評議" : null]} />
       </div>
 
-      <div className="relative">
-        <h2 className="mt-6 pr-16 text-xl font-bold leading-snug sm:text-2xl">
-          {itemNumber}
-          <br />
+      <div className="relative border-b border-ink/25 pb-4">
+        <h2 className="mt-5 pr-20 text-xl font-bold leading-snug sm:text-2xl">
+          <span className="block font-mono text-sm tracking-wider text-ink/80">{itemNumber}</span>
           {report.title}
         </h2>
         <ClassifiedStamp />
@@ -79,8 +82,15 @@ export const ReportDocument = forwardRef<HTMLElement, ReportDocumentProps>(funct
 
       {/* 添付資料(撮影写真) */}
       <figure className="my-5 border border-ink/30 bg-white p-2 sm:float-right sm:my-1 sm:ml-6 sm:w-[46%]">
-        {/* eslint-disable-next-line @next/next/no-img-element -- IndexedDB の Blob を表示するため */}
-        <img src={photoUrl} alt={`${itemNumber} の記録画像`} className="w-full" />
+        {photoUrl ? (
+          // crossOrigin: 画像の書き出し(html-to-image)で、読み込んだ画像を canvas に描けるようにする
+          // eslint-disable-next-line @next/next/no-img-element -- IndexedDB の Blob や、認証付きの API の画像を表示するため
+          <img src={photoUrl} alt={`${itemNumber} の記録画像`} crossOrigin="anonymous" className="w-full" />
+        ) : (
+          <div className="flex aspect-[4/3] w-full items-center justify-center bg-ink/[0.06] font-mono text-[11px] text-ink/60">
+            記録画像 ── 表示できません
+          </div>
+        )}
         <figcaption className="mt-2 text-[12px] leading-relaxed">
           <RichText text={report.photoCaption} clearance={clearance} inline />
         </figcaption>

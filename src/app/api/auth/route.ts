@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { clientIp, hit, RATE_RULES, tooManyRequests } from "@/lib/server/rate-limit.ts";
 import { clearanceForCode, decodeSession, encodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session.ts";
 
 /** GET /api/auth  現在のクリアランスを返す(未認証なら null) */
@@ -10,22 +11,22 @@ export async function GET() {
 /**
  * POST /api/auth  { code: string }
  * 職員認証コードを照合し、クリアランスを書き込んだ署名付きCookieを発行する。
+ * 総当たりを防ぐため、1つの IP からの照合は回数を制限する(成功も数える)
  */
 export async function POST(request: Request) {
+  const limited = await hit(RATE_RULES.auth, clientIp(request));
+  if (!limited.ok) return tooManyRequests(limited.retryAfter, "認証の試行回数が上限に達しました。");
+
   let code = "";
   try {
     const body = (await request.json()) as { code?: unknown };
-    code = typeof body.code === "string" ? body.code : "";
+    code = typeof body.code === "string" ? body.code.slice(0, 200) : "";
   } catch {
     return Response.json({ ok: false }, { status: 400 });
   }
 
   const clearance = clearanceForCode(code);
-  if (!clearance) {
-    // 総当たりを遅らせるため、失敗時は少し待ってから返す
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    return Response.json({ ok: false }, { status: 401 });
-  }
+  if (!clearance) return Response.json({ ok: false }, { status: 401 });
 
   (await cookies()).set({
     name: SESSION_COOKIE,
