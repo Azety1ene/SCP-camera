@@ -217,6 +217,8 @@ body {
       inset 0 0 0 3px var(--paper),
       inset 0 0 0 4px rgba(25, 25, 23, 0.14),
       4px 4px 0 rgba(0, 0, 0, 0.45);
+    /* 長い英数字の並び(記号やコードなど)が紙面からはみ出さないようにする */
+    overflow-wrap: anywhere;
   }
 
   /* 端末の暗色パネル内に RichText の黒塗り開示を出すとき用 */
@@ -244,6 +246,9 @@ body {
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   padding: 0 0.1em;
+  /* 伏せ字(█)が続くと1語として扱われて折り返されず、スマホでは画面が横に広がって縮小表示になるため、どこでも折り返す */
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* 黒塗りをタップしたときの拒否。行をまたぐ黒塗りでも崩れないよう、transform ではなく left で揺らす */
