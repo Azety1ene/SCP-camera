@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { TerminalShell } from "@/components/TerminalShell.tsx";
-import { cctvTimestamp, drawToCanvas, toCctvJpeg, toSourceJpeg } from "@/lib/client/cctv.ts";
+import { cctvTimestamp, decodeImageBlob, drawToCanvas, toCctvJpeg, toSourceJpeg } from "@/lib/client/cctv.ts";
 import { newRecordId, saveRecord } from "@/lib/client/db.ts";
 import { rememberFiltered, rememberPhoto, rememberShare } from "@/lib/client/upload-cache.ts";
 import { useStaff } from "@/lib/client/progress.ts";
@@ -173,13 +173,16 @@ export function ScanCamera() {
     };
   }, [clearance, facing]);
 
-  // 顔検出の準備。失敗したら「再試行」で読み込み直せる
+  // 顔検出の準備。GPU 初期化の競合を避けるため、プレビュー用と静止画用を順に読み込む
   useEffect(() => {
     if (!clearance) return;
     let cancelled = false;
-    Promise.all([loadFaceDetector(), loadImageFaceDetector()]).then(([video, image]) => {
+    (async () => {
+      const video = await loadFaceDetector();
+      if (cancelled) return;
+      const image = await loadImageFaceDetector();
       if (!cancelled) setFaceStatus(video && image ? "ready" : "unavailable");
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -252,7 +255,7 @@ export function ScanCamera() {
 
   async function onShutter() {
     const video = videoRef.current;
-    if (!video || state !== "live" || capturing) return;
+    if (!video || state !== "live" || capturing || video.videoWidth <= 0 || video.videoHeight <= 0) return;
     setCapturing(true);
     setFlash(true);
     play("shutter");
@@ -261,7 +264,8 @@ export function ScanCamera() {
       await record(drawToCanvas(video));
     } catch (error) {
       console.error("[scan] 記録できませんでした", error);
-      setCaptureError("記録に失敗しました。もう一度撮影してください。");
+      const code = error instanceof Error && error.name ? ` (${error.name})` : "";
+      setCaptureError(`記録に失敗しました。もう一度撮影してください。${code}`);
       setCapturing(false);
       setFlash(false);
       video.play().catch(() => {});
@@ -271,21 +275,28 @@ export function ScanCamera() {
   async function onFile(event: ChangeEvent<HTMLInputElement>) {
     const input = event.target;
     const file = input.files?.[0];
-    input.value = "";
     if (!file) return;
     setCapturing(true);
-    let bitmap: ImageBitmap | null = null;
+    setCaptureError("");
     try {
-      bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-      const canvas = drawToCanvas(bitmap);
-      bitmap.close();
-      bitmap = null;
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await decodeImageBlob(file);
+      } catch (error) {
+        console.error("[scan] 画像を読み込めませんでした", error);
+        setCaptureError("記録画像を読み込めませんでした。別の画像を選んでください。");
+        setCapturing(false);
+        return;
+      }
       await record(canvas);
     } catch (error) {
-      console.error("[scan] 画像を読み込めませんでした", error);
-      bitmap?.close();
-      setCaptureError("記録画像を読み込めませんでした。別の画像を選んでください。");
+      console.error("[scan] 記録できませんでした", error);
+      const code = error instanceof Error && error.name ? ` (${error.name})` : "";
+      setCaptureError(`記録の保存に失敗しました。もう一度お試しください。${code}`);
       setCapturing(false);
+    } finally {
+      // 読み込み後に空にすることで、iOS Safari でのファイル参照消失を防ぎつつ同じファイルの再選択も可能にする
+      input.value = "";
     }
   }
 
@@ -327,10 +338,16 @@ export function ScanCamera() {
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
+                  disabled={capturing}
                   className="btn btn-primary mt-4 w-full"
                 >
-                  記録画像を読み込む
+                  {capturing ? "画像を処理中 …" : "記録画像を読み込む"}
                 </button>
+                {captureError && (
+                  <p role="alert" className="mt-3 text-xs text-danger">
+                    {captureError}
+                  </p>
+                )}
               </div>
             </div>
           )}

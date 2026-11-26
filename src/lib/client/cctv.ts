@@ -29,12 +29,57 @@ function canvasToBlob(canvas: HTMLCanvasElement, quality = 0.85): Promise<Blob> 
 
 export function drawToCanvas(source: Drawable): HTMLCanvasElement {
   const size = sourceSize(source);
+  if (size.width <= 0 || size.height <= 0) {
+    throw new Error("画像のサイズを取得できませんでした");
+  }
   const { width, height } = fit(size.width, size.height);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   canvas.getContext("2d")!.drawImage(source, 0, 0, width, height);
   return canvas;
+}
+
+/**
+ * 選択した画像ファイル(または Blob)を canvas に描ける形へデコードする。
+ * iOS Safari 等で createImageBitmap のオプションや一部形式が失敗することがあるため、
+ * 段階的に <img> 読み込みへフォールバックする。
+ */
+export async function decodeImageBlob(blob: Blob): Promise<HTMLCanvasElement> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+      try {
+        return drawToCanvas(bitmap);
+      } finally {
+        bitmap.close();
+      }
+    } catch {
+      try {
+        const bitmap = await createImageBitmap(blob);
+        try {
+          return drawToCanvas(bitmap);
+        } finally {
+          bitmap.close();
+        }
+      } catch {
+        // 下の <img> フォールバックへ
+      }
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("画像を読み込めませんでした"));
+      el.src = url;
+    });
+    return drawToCanvas(img);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 export async function toSourceJpeg(canvas: HTMLCanvasElement): Promise<Blob> {

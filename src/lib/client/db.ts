@@ -47,6 +47,9 @@ export type RecordPhotos = {
   photoShare?: Blob;
 };
 
+/** 版1で records ストアに直接入っていた画像フィールド(後方互換用) */
+type LegacyRecordWithPhotos = ContainmentRecord & Partial<Pick<RecordPhotos, "photo" | "photoFiltered">>;
+
 interface ScpDB extends DBSchema {
   records: {
     key: string;
@@ -71,25 +74,29 @@ let dbPromise: Promise<IDBPDatabase<ScpDB>> | null = null;
 function db() {
   if (!dbPromise) {
     dbPromise = openDB<ScpDB>("scp-camera", 2, {
-      async upgrade(database, oldVersion, _newVersion, transaction) {
-        if (oldVersion < 1) {
+      // upgrade は必ず同期処理だけで終わらせる(await や Blob コピーを挟むと Safari 等で TransactionInactiveError になるため)
+      upgrade(database, oldVersion, _newVersion, transaction) {
+        if (oldVersion < 1 && !database.objectStoreNames.contains("records")) {
           const store = database.createObjectStore("records", { keyPath: "id" });
           store.createIndex("by-created", "createdAt");
         }
         if (oldVersion < 2) {
-          database.createObjectStore("photos", { keyPath: "id" });
+          if (!database.objectStoreNames.contains("photos")) {
+            database.createObjectStore("photos", { keyPath: "id" });
+          }
           const records = transaction.objectStore("records");
-          records.createIndex("by-status", "status");
-          // 版1では、記録の中に画像を持っていた。画像を photos に移す
-          const photos = transaction.objectStore("photos");
-          let cursor = await records.openCursor();
-          while (cursor) {
-            const { photo, photoFiltered, ...meta } = cursor.value as ContainmentRecord & Partial<RecordPhotos>;
-            if (photo && photoFiltered) await photos.put({ id: meta.id, photo, photoFiltered });
-            await cursor.update(meta);
-            cursor = await cursor.continue();
+          if (!records.indexNames.contains("by-status")) {
+            records.createIndex("by-status", "status");
           }
         }
+      },
+      blocking(_current, _blocked, event) {
+        // 別タブが新しい版を開こうとしたとき、古い接続を閉じてハングを防ぐ
+        (event.target as IDBDatabase | null)?.close();
+        dbPromise = null;
+      },
+      terminated() {
+        dbPromise = null;
       },
     }).catch((error) => {
       dbPromise = null;
@@ -102,7 +109,13 @@ function db() {
 export async function saveRecord(record: ContainmentRecord, photos: Omit<RecordPhotos, "id">): Promise<void> {
   const database = await db();
   const tx = database.transaction(["records", "photos"], "readwrite");
-  await Promise.all([tx.objectStore("photos").put({ id: record.id, ...photos }), tx.objectStore("records").put(record), tx.done]);
+  const photoEntry: RecordPhotos = {
+    id: record.id,
+    photo: photos.photo,
+    photoFiltered: photos.photoFiltered,
+    ...(photos.photoShare ? { photoShare: photos.photoShare } : {}),
+  };
+  await Promise.all([tx.objectStore("photos").put(photoEntry), tx.objectStore("records").put(record), tx.done]);
   announce(record.id);
 }
 
@@ -111,7 +124,15 @@ export async function getRecord(id: string): Promise<ContainmentRecord | undefin
 }
 
 export async function getPhotos(id: string): Promise<RecordPhotos | undefined> {
-  return (await db()).get("photos", id);
+  const database = await db();
+  const found = await database.get("photos", id);
+  if (found) return found;
+  // 版1で保存された記録は records 側に直接画像が入っているため、互換のためそこから取り出す
+  const legacy = (await database.get("records", id)) as LegacyRecordWithPhotos | undefined;
+  if (legacy?.photo && legacy?.photoFiltered) {
+    return { id, photo: legacy.photo, photoFiltered: legacy.photoFiltered };
+  }
+  return undefined;
 }
 
 export async function updateRecord(id: string, patch: Partial<ContainmentRecord>): Promise<ContainmentRecord | undefined> {
@@ -127,10 +148,10 @@ export async function updateRecord(id: string, patch: Partial<ContainmentRecord>
 
 export async function updatePhotos(id: string, patch: Partial<Omit<RecordPhotos, "id">>): Promise<void> {
   const database = await db();
+  const existing = await getPhotos(id);
+  if (!existing) return;
   const tx = database.transaction("photos", "readwrite");
-  const current = await tx.store.get(id);
-  if (!current) return;
-  await Promise.all([tx.store.put({ ...current, ...patch, id }), tx.done]);
+  await Promise.all([tx.store.put({ ...existing, ...patch, id }), tx.done]);
 }
 
 /** 新しい順(画像は含まない) */
@@ -152,5 +173,13 @@ export async function deleteRecord(id: string): Promise<void> {
 }
 
 export function newRecordId(): string {
-  return crypto.randomUUID();
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

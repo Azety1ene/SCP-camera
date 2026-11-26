@@ -103,37 +103,19 @@ function MailWatcher({ staff }: { staff: StaffState }) {
   );
 }
 
-const KEYS = [
-  { key: "F1", href: "/portal", label: "業務トップ" },
-  { key: "F2", href: "/scan", label: "観測" },
-  { key: "F3", href: "/archive", label: "収容記録" },
-  { key: "F4", href: "/library", label: "書庫" },
-  { key: "F5", href: "/inbox", label: "受信箱" },
+const NAV_ITEMS = [
+  { href: "/portal", label: "業務トップ" },
+  { href: "/scan", label: "観測" },
+  { href: "/archive", label: "収容記録" },
+  { href: "/library", label: "書庫" },
+  { href: "/inbox", label: "受信箱" },
 ] as const;
 
 /**
- * 画面下のファンクションキー帯(1990〜2000年代の専用業務端末の操作バーを参照)。
- * 今いる画面のキーは白黒反転で示す。指で押しやすいよう、1つのキーの高さは 56px
+ * 画面下の操作帯。今いる画面は白黒反転で示す。指で押しやすいよう高さは 56px
  */
-function FunctionKeys({ unread }: { unread: number }) {
+function BottomNav({ unread }: { unread: number }) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  // PC では、表示どおり F1〜F5 のキーで画面を切り替えられる(入力中と、修飾キーとの組み合わせは除く)
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
-      const key = KEYS.find((item) => item.key === event.key);
-      if (!key) return;
-      event.preventDefault();
-      play("tap");
-      router.push(key.href);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [router]);
 
   return (
     <nav
@@ -141,7 +123,7 @@ function FunctionKeys({ unread }: { unread: number }) {
       className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-line-strong bg-sunken pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="mx-auto grid max-w-3xl grid-cols-5 divide-x divide-line border-x border-line">
-        {KEYS.map(({ key, href, label }) => {
+        {NAV_ITEMS.map(({ href, label }) => {
           const active = pathname.startsWith(href) || (href === "/archive" && pathname.startsWith("/database"));
           return (
             <li key={href}>
@@ -149,24 +131,16 @@ function FunctionKeys({ unread }: { unread: number }) {
                 href={href}
                 onClick={() => play("tap")}
                 aria-current={active ? "page" : undefined}
-                aria-keyshortcuts={key}
-                className={`flex h-14 flex-col items-center justify-center gap-1 px-1 transition-colors ${
+                className={`flex h-14 items-center justify-center px-1 text-center transition-colors ${
                   active
                     ? "bg-foreground text-background shadow-[inset_0_2px_0_var(--seal)]"
                     : "bg-panel text-foreground hover:bg-raised shadow-[inset_0_-2px_0_rgba(0,0,0,0.45)]"
                 }`}
               >
-                <span
-                  className={`border px-1 font-mono text-[9px] leading-[1.35] ${
-                    active ? "border-background/40 bg-background/10 text-background" : "border-line-strong bg-sunken text-muted"
-                  }`}
-                >
-                  {key}
-                </span>
-                <span className="truncate text-[11px] font-bold leading-none">
+                <span className="truncate text-xs font-bold leading-none">
                   {label}
                   {href === "/inbox" && unread > 0 && (
-                    <span className={active ? "ml-0.5 font-mono" : "ml-0.5 font-mono text-seal-text"}>[{unread}]</span>
+                    <span className={active ? "ml-0.5 font-mono" : "ml-0.5 font-mono text-seal-text"}>({unread})</span>
                   )}
                 </span>
               </Link>
@@ -271,7 +245,7 @@ function MenuSheet({
   );
 }
 
-/** 認証後の画面で共通の枠。上に業務システムのヘッダー帯と状態欄、下にファンクションキー帯を出す */
+/** 認証後の画面で共通の枠。上に業務システムのヘッダー帯と状態欄、下に画面切替バーを出す */
 export type ScreenInfo = { id: string; name: string };
 
 export function TerminalShell({
@@ -361,7 +335,7 @@ export function TerminalShell({
       >
         {children}
       </div>
-      <FunctionKeys unread={unread} />
+      <BottomNav unread={unread} />
     </div>
   );
 }

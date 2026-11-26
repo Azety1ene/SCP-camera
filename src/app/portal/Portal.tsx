@@ -255,7 +255,6 @@ function PortalBody({ staff }: { staff: StaffState }) {
                 周囲の物品を観測し、異常性の有無を財団データベースへ照会します。
               </p>
               <Link href="/scan" onClick={() => play("tap")} className="btn btn-primary shrink-0">
-                <span className="border border-background/40 px-1 font-mono text-[10px]">F2</span>
                 観測を開始する
               </Link>
             </div>

@@ -92,9 +92,12 @@ export function detectFaces(detector: FaceDetector, source: HTMLVideoElement): F
   }
 }
 
-/** 静止画から顔を探す(IMAGE モード)。検出器を使えなければ null。座標は画像のピクセル単位 */
-export async function detectFacesInImage(source: HTMLCanvasElement): Promise<FaceBox[] | null> {
-  const detector = await loadImageFaceDetector();
+/** 静止画から顔を探す(IMAGE モード)。検出器を使えない、または読み込みが長引くときは null。座標は画像のピクセル単位 */
+export async function detectFacesInImage(source: HTMLCanvasElement, timeoutMs = 4000): Promise<FaceBox[] | null> {
+  const detector = await Promise.race([
+    loadImageFaceDetector(),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
   if (!detector) return null;
   try {
     return toBoxes(detector.detect(source));

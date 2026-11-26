@@ -1,6 +1,7 @@
 "use client";
 
 import type { GeneratedReport } from "@/lib/report/schema.ts";
+import { decodeImageBlob } from "@/lib/client/cctv.ts";
 
 /** 財団データベース(全職員で共有する報告書)のクライアント側 */
 
@@ -74,13 +75,7 @@ export async function deleteShared(id: string, deleteKey?: string): Promise<void
 
 /** 長い辺を1280pxまでに縮め、WebP にする。ブラウザが WebP に変換できなければ JPEG にする */
 export async function toShareImage(source: Blob): Promise<Blob> {
-  const bitmap = await createImageBitmap(source);
-  const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
+  const canvas = await decodeImageBlob(source);
   const encode = (type: string, quality: number) =>
     new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
   const webp = await encode("image/webp", 0.8);
