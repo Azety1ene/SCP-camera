@@ -50,6 +50,38 @@ export type RecordPhotos = {
 /** 版1で records ストアに直接入っていた画像フィールド(後方互換用) */
 type LegacyRecordWithPhotos = ContainmentRecord & Partial<Pick<RecordPhotos, "photo" | "photoFiltered">>;
 
+/**
+ * 保存先での画像の持ち方。
+ * Safari では Blob をそのまま IndexedDB に入れると「UnknownError: Error preparing Blob/File data to be stored in object store」
+ * で失敗することがある(WebKit の既知の不具合)。そのためバイト列と形式に分けて保存する。
+ * 以前に Blob のまま保存した記録も読めるよう、読み出し時は両方を受け付ける。
+ */
+type StoredImage = Blob | { bytes: ArrayBuffer; type: string };
+
+type StoredPhotos = {
+  id: string;
+  photo: StoredImage;
+  photoFiltered: StoredImage;
+  photoShare?: StoredImage;
+};
+
+async function toStored(image: Blob): Promise<StoredImage> {
+  return { bytes: await image.arrayBuffer(), type: image.type };
+}
+
+function fromStored(image: StoredImage): Blob {
+  return image instanceof Blob ? image : new Blob([image.bytes], { type: image.type });
+}
+
+function toPhotos(stored: StoredPhotos): RecordPhotos {
+  return {
+    id: stored.id,
+    photo: fromStored(stored.photo),
+    photoFiltered: fromStored(stored.photoFiltered),
+    ...(stored.photoShare ? { photoShare: fromStored(stored.photoShare) } : {}),
+  };
+}
+
 interface ScpDB extends DBSchema {
   records: {
     key: string;
@@ -58,7 +90,7 @@ interface ScpDB extends DBSchema {
   };
   photos: {
     key: string;
-    value: RecordPhotos;
+    value: StoredPhotos;
   };
 }
 
@@ -107,14 +139,15 @@ function db() {
 }
 
 export async function saveRecord(record: ContainmentRecord, photos: Omit<RecordPhotos, "id">): Promise<void> {
+  // バイト列への変換はトランザクションを開く前に済ませる(途中で await すると自動で確定してしまう)
+  const [photo, photoFiltered, photoShare] = await Promise.all([
+    toStored(photos.photo),
+    toStored(photos.photoFiltered),
+    photos.photoShare ? toStored(photos.photoShare) : undefined,
+  ]);
   const database = await db();
   const tx = database.transaction(["records", "photos"], "readwrite");
-  const photoEntry: RecordPhotos = {
-    id: record.id,
-    photo: photos.photo,
-    photoFiltered: photos.photoFiltered,
-    ...(photos.photoShare ? { photoShare: photos.photoShare } : {}),
-  };
+  const photoEntry: StoredPhotos = { id: record.id, photo, photoFiltered, ...(photoShare ? { photoShare } : {}) };
   await Promise.all([tx.objectStore("photos").put(photoEntry), tx.objectStore("records").put(record), tx.done]);
   announce(record.id);
 }
@@ -126,7 +159,7 @@ export async function getRecord(id: string): Promise<ContainmentRecord | undefin
 export async function getPhotos(id: string): Promise<RecordPhotos | undefined> {
   const database = await db();
   const found = await database.get("photos", id);
-  if (found) return found;
+  if (found) return toPhotos(found);
   // 版1で保存された記録は records 側に直接画像が入っているため、互換のためそこから取り出す
   const legacy = (await database.get("records", id)) as LegacyRecordWithPhotos | undefined;
   if (legacy?.photo && legacy?.photoFiltered) {
@@ -147,11 +180,17 @@ export async function updateRecord(id: string, patch: Partial<ContainmentRecord>
 }
 
 export async function updatePhotos(id: string, patch: Partial<Omit<RecordPhotos, "id">>): Promise<void> {
-  const database = await db();
   const existing = await getPhotos(id);
   if (!existing) return;
+  const next = { ...existing, ...patch, id };
+  const [photo, photoFiltered, photoShare] = await Promise.all([
+    toStored(next.photo),
+    toStored(next.photoFiltered),
+    next.photoShare ? toStored(next.photoShare) : undefined,
+  ]);
+  const database = await db();
   const tx = database.transaction("photos", "readwrite");
-  await Promise.all([tx.store.put({ ...existing, ...patch, id }), tx.done]);
+  await Promise.all([tx.store.put({ id, photo, photoFiltered, ...(photoShare ? { photoShare } : {}) }), tx.done]);
 }
 
 /** 新しい順(画像は含まない) */
